@@ -2,26 +2,17 @@ import React, { useState } from 'react';
 import { 
   AlertTriangle, 
   ArrowUpRight, 
-  ArrowDownRight, 
   CheckCircle2, 
   ChevronRight, 
-  DollarSign, 
-  HelpCircle, 
   Package, 
   ShieldAlert, 
   ShieldCheck, 
   Sparkles, 
   TrendingDown, 
-  TrendingUp, 
-  Zap,
-  ShoppingBag,
-  ExternalLink,
-  Flame,
-  Clock,
-  Percent,
-  Layers
+  TrendingUp
 } from 'lucide-react';
 import { AIActionItem, Product } from '../types';
+import { formatBDT } from '../utils/forecasting';
 
 interface ExecutiveDashboardProps {
   products: Product[];
@@ -64,38 +55,29 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   const deadCapitalPercentage = totalValuation > 0 ? ((deadCapital / totalValuation) * 100).toFixed(1) : '0';
   const activeSkusCount = products.filter(p => p.status !== 'dead_stock').length;
 
-  // Category breakdown calculations
-  const categories = Array.from(new Set(products.map(p => p.category)));
-  const categoryStats = categories.map(cat => {
-    const catProds = products.filter(p => p.category === cat);
-    const catVal = catProds.reduce((sum, p) => sum + p.currentStock * p.unitPrice, 0);
-    const catCritical = catProds.filter(p => p.status === 'critical').length;
-    return { category: cat, valuation: catVal, count: catProds.length, criticalCount: catCritical };
-  });
-
   return (
     <div className="space-y-6 pb-12">
       
       {/* ------------------------------------------------------------- */}
-      {/* SECTION 1: TOP METRIC CARDS                                    */}
+      {/* SECTION 1: CLEAN TOP METRICS (BDT ৳)                          */}
       {/* ------------------------------------------------------------- */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         
         {/* Metric 1: Health Score */}
-        <div className="rounded-xl border border-slate-800/80 bg-slate-900/70 p-4 shadow-sm backdrop-blur-sm">
-          <div className="flex items-center justify-between text-xs text-slate-400">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="flex items-center justify-between text-xs text-slate-500">
             <span>Health Score</span>
-            <span className="flex h-2 w-2 rounded-full bg-emerald-400"></span>
+            <span className="flex h-2 w-2 rounded-full bg-emerald-500"></span>
           </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-3xl font-bold tracking-tight text-white">{healthScore}</span>
-            <span className="text-xs font-semibold text-slate-400">/ 100</span>
+          <div className="mt-2 flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold tracking-tight text-slate-900">{healthScore}</span>
+            <span className="text-xs text-slate-500">/ 100</span>
           </div>
-          <div className="mt-2 flex items-center gap-1 text-[11px] text-emerald-400">
+          <div className="mt-2 flex items-center gap-1 text-[11px] text-emerald-600 font-semibold">
             <ArrowUpRight className="h-3 w-3" />
-            <span>+{healthDelta}% vs 7-day avg</span>
+            <span>+{healthDelta}% vs 7-day</span>
           </div>
-          <div className="mt-2 h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
+          <div className="mt-2 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
             <div 
               className={`h-full rounded-full transition-all duration-500 ${
                 healthScore >= 75 ? 'bg-emerald-500' : healthScore >= 50 ? 'bg-amber-500' : 'bg-rose-500'
@@ -106,51 +88,51 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
         </div>
 
         {/* Metric 2: Total SKUs & Active */}
-        <div className="rounded-xl border border-slate-800/80 bg-slate-900/70 p-4 shadow-sm backdrop-blur-sm">
-          <div className="flex items-center justify-between text-xs text-slate-400">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="flex items-center justify-between text-xs text-slate-500">
             <span>Total Catalog</span>
-            <Package className="h-4 w-4 text-indigo-400" />
+            <Package className="h-4 w-4 text-indigo-600" />
           </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-3xl font-bold tracking-tight text-white">{products.length}</span>
-            <span className="text-xs text-slate-400">SKUs</span>
+          <div className="mt-2 flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold tracking-tight text-slate-900">{products.length}</span>
+            <span className="text-xs text-slate-500">SKUs</span>
           </div>
-          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
-            <span className="text-emerald-400 font-medium">{activeSkusCount} Active</span>
-            <span className="text-amber-400 font-medium">{products.length - activeSkusCount} Stagnant</span>
+          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-600">
+            <span className="text-emerald-700 font-medium">{activeSkusCount} Active</span>
+            <span className="text-amber-700 font-medium">{products.length - activeSkusCount} Idle</span>
           </div>
-          <div className="mt-2 text-[10px] text-slate-500">Across 5 retail categories</div>
+          <div className="mt-2 text-[10px] text-slate-400">5 Bangladesh retail sectors</div>
         </div>
 
-        {/* Metric 3: Total Asset Valuation */}
-        <div className="rounded-xl border border-slate-800/80 bg-slate-900/70 p-4 shadow-sm backdrop-blur-sm">
-          <div className="flex items-center justify-between text-xs text-slate-400">
+        {/* Metric 3: Total Asset Valuation (in BDT) */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="flex items-center justify-between text-xs text-slate-500">
             <span>Inventory Valuation</span>
-            <DollarSign className="h-4 w-4 text-emerald-400" />
+            <span className="font-bold text-emerald-600">৳</span>
           </div>
-          <div className="mt-2 flex items-baseline gap-1">
-            <span className="text-2xl font-bold tracking-tight text-white">${totalValuation.toLocaleString()}</span>
+          <div className="mt-2">
+            <span className="text-xl font-bold tracking-tight text-slate-900">{formatBDT(totalValuation)}</span>
           </div>
-          <div className="mt-2 text-[11px] text-slate-400">
-            Total on-hand wholesale & retail basis
+          <div className="mt-2 text-[11px] text-slate-500">
+            Current wholesale stock value
           </div>
-          <div className="mt-2 text-[10px] text-slate-500">Avg Turnover: 4.8x/yr</div>
+          <div className="mt-2 text-[10px] text-slate-400">Turnover: 5.2x/year</div>
         </div>
 
-        {/* Metric 4: Dead Capital Locked */}
-        <div className="rounded-xl border border-slate-800/80 bg-slate-900/70 p-4 shadow-sm backdrop-blur-sm">
-          <div className="flex items-center justify-between text-xs text-amber-400">
+        {/* Metric 4: Dead Capital Locked (in BDT) */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="flex items-center justify-between text-xs text-amber-700">
             <span>Dead Capital</span>
-            <TrendingDown className="h-4 w-4 text-amber-400" />
+            <TrendingDown className="h-4 w-4 text-amber-600" />
           </div>
-          <div className="mt-2 flex items-baseline gap-1">
-            <span className="text-2xl font-bold tracking-tight text-amber-300">${deadCapital.toLocaleString()}</span>
+          <div className="mt-2">
+            <span className="text-xl font-bold tracking-tight text-amber-700">{formatBDT(deadCapital)}</span>
           </div>
-          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
-            <span className="text-amber-400 font-semibold">{deadCapitalPercentage}% of total</span>
-            <span>28d+ inactivity</span>
+          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-600">
+            <span className="text-amber-700 font-semibold">{deadCapitalPercentage}% of total</span>
+            <span>30d+ idle</span>
           </div>
-          <div className="mt-2 h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
+          <div className="mt-2 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
             <div 
               className="h-full bg-amber-500 rounded-full" 
               style={{ width: `${Math.min(100, Number(deadCapitalPercentage) * 2)}%` }}
@@ -159,225 +141,189 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
         </div>
 
         {/* Metric 5: High-Risk Stockouts */}
-        <div className="rounded-xl border border-slate-800/80 bg-slate-900/70 p-4 shadow-sm backdrop-blur-sm">
-          <div className="flex items-center justify-between text-xs text-slate-400">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="flex items-center justify-between text-xs text-rose-600">
             <span>Stockout Risk</span>
-            <ShieldAlert className="h-4 w-4 text-rose-400" />
+            <ShieldAlert className="h-4 w-4 text-rose-600" />
           </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-3xl font-bold tracking-tight text-rose-400">{criticalCount}</span>
-            <span className="text-xs text-rose-400/80">Critical</span>
+          <div className="mt-2 flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold tracking-tight text-rose-600">{criticalCount}</span>
+            <span className="text-xs text-rose-500 font-medium">Critical</span>
           </div>
-          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-400">
-            <AlertTriangle className="h-3 w-3" />
+          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-700">
+            <AlertTriangle className="h-3 w-3 text-amber-600" />
             <span>{attentionCount} needing attention</span>
           </div>
-          <div className="mt-2 text-[10px] text-slate-500">Days to stockout &lt; Lead time</div>
+          <div className="mt-2 text-[10px] text-slate-400">Days to stockout &lt; Lead time</div>
         </div>
 
-        {/* Metric 6: Avoided Stockout Loss */}
-        <div className="rounded-xl border border-emerald-500/20 bg-emerald-950/20 p-4 shadow-sm backdrop-blur-sm">
-          <div className="flex items-center justify-between text-xs text-emerald-400 font-medium">
+        {/* Metric 6: Avoided Stockout Loss (in BDT) */}
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 shadow-xs">
+          <div className="flex items-center justify-between text-xs text-emerald-700 font-medium">
             <span>Avoided Stockout Loss</span>
-            <ShieldCheck className="h-4 w-4 text-emerald-400" />
+            <ShieldCheck className="h-4 w-4 text-emerald-600" />
           </div>
-          <div className="mt-2 flex items-baseline gap-1">
-            <span className="text-2xl font-bold tracking-tight text-emerald-300">${avoidedLoss.toLocaleString()}</span>
+          <div className="mt-2">
+            <span className="text-xl font-bold tracking-tight text-emerald-700">{formatBDT(avoidedLoss)}</span>
           </div>
-          <div className="mt-2 text-[11px] text-emerald-400/80">
-            Forecast Accuracy: <span className="font-semibold text-emerald-300">94.2%</span>
+          <div className="mt-2 text-[11px] text-emerald-600">
+            Protected Revenue
           </div>
-          <div className="mt-2 text-[10px] text-emerald-500/80">Protected by StockMind AI</div>
+          <div className="mt-2 text-[10px] text-emerald-700 font-medium">Forecast Accuracy: 95.4%</div>
         </div>
 
       </div>
 
       {/* ------------------------------------------------------------- */}
-      {/* SECTION 2: AI ACTION CENTER (PRIORITIZED QUEUE)               */}
+      {/* SECTION 2: SIMPLIFIED AI ACTION CENTER                        */}
       {/* ------------------------------------------------------------- */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 shadow-xl backdrop-blur-md">
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
         
-        {/* Header */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* Action Header */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4">
           <div>
             <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-400">
-                <Sparkles className="h-4 w-4" />
-              </div>
-              <h2 className="text-base font-bold text-white tracking-tight">AI Action Center — Prioritized Decision Queue</h2>
+              <Sparkles className="h-4 w-4 text-emerald-600" />
+              <h2 className="text-base font-bold text-slate-900 tracking-tight">AI Decision Action Center</h2>
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                {actionQueue.filter(a => a.status === 'pending').length} Pending Decisions
+              </span>
             </div>
-            <p className="mt-1 text-xs text-slate-400">
-              Human-in-the-Loop decision recommendations generated by real-time risk, lead time, and dead-stock algorithms.
+            <p className="mt-0.5 text-xs text-slate-500">
+              Automated reorder triggers and buffer adjustments calculated from real-time sales velocity.
             </p>
           </div>
 
           {/* Filter Pills */}
-          <div className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950/60 p-1">
+          <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
             <button
               onClick={() => setFilterSeverity('all')}
               className={`rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
-                filterSeverity === 'all' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                filterSeverity === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               All ({actionQueue.length})
             </button>
             <button
               onClick={() => setFilterSeverity('urgent')}
-              className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
-                filterSeverity === 'urgent' ? 'bg-rose-600 text-white' : 'text-rose-400 hover:bg-rose-950/40'
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
+                filterSeverity === 'urgent' ? 'bg-rose-600 text-white shadow-xs' : 'text-rose-600 hover:bg-rose-50'
               }`}
             >
-              <span className="h-1.5 w-1.5 rounded-full bg-rose-400"></span>
               Urgent ({actionQueue.filter(a => a.severity === 'urgent').length})
             </button>
             <button
               onClick={() => setFilterSeverity('attention')}
-              className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
-                filterSeverity === 'attention' ? 'bg-amber-600 text-white' : 'text-amber-400 hover:bg-amber-950/40'
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
+                filterSeverity === 'attention' ? 'bg-amber-500 text-white shadow-xs' : 'text-amber-700 hover:bg-amber-50'
               }`}
             >
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-400"></span>
               Attention ({actionQueue.filter(a => a.severity === 'attention').length})
-            </button>
-            <button
-              onClick={() => setFilterSeverity('optimize')}
-              className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
-                filterSeverity === 'optimize' ? 'bg-blue-600 text-white' : 'text-blue-400 hover:bg-blue-950/40'
-              }`}
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-blue-400"></span>
-              Optimize ({actionQueue.filter(a => a.severity === 'optimize').length})
             </button>
           </div>
         </div>
 
-        {/* Action Cards Queue */}
-        <div className="mt-6 space-y-3.5">
+        {/* Action Items List */}
+        <div className="mt-4 space-y-3">
           {filteredActions.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-800 p-8 text-center text-xs text-slate-500">
-              No pending actions in this category. All systems optimized!
+            <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-xs text-slate-500">
+              No pending actions in this filter. All inventory balanced!
             </div>
           ) : (
             filteredActions.map((action) => {
               const matchingProduct = products.find(p => p.id === action.productId);
               const isApproved = action.status === 'approved';
+              const sku = action.sku || action.productSku;
+              const reason = action.reasoning || action.description;
+              const qty = action.suggestedQuantity || action.recommendedQuantity || 50;
 
               return (
                 <div
                   key={action.id}
-                  className={`group relative flex flex-col justify-between gap-4 rounded-xl border p-4.5 transition-all lg:flex-row lg:items-center ${
+                  className={`flex flex-col justify-between gap-3 rounded-xl border p-4 transition-all lg:flex-row lg:items-center ${
                     isApproved
-                      ? 'border-emerald-500/30 bg-emerald-950/10 opacity-75'
+                      ? 'border-emerald-200 bg-emerald-50/40 opacity-80'
                       : action.severity === 'urgent'
-                      ? 'border-rose-500/30 bg-gradient-to-r from-rose-950/20 via-slate-900 to-slate-900 hover:border-rose-500/50'
+                      ? 'border-rose-200 bg-rose-50/40 hover:border-rose-300'
                       : action.severity === 'attention'
-                      ? 'border-amber-500/30 bg-gradient-to-r from-amber-950/20 via-slate-900 to-slate-900 hover:border-amber-500/50'
-                      : 'border-blue-500/30 bg-gradient-to-r from-blue-950/20 via-slate-900 to-slate-900 hover:border-blue-500/50'
+                      ? 'border-amber-200 bg-amber-50/40 hover:border-amber-300'
+                      : 'border-slate-200 bg-slate-50/50 hover:border-slate-300'
                   }`}
                 >
-                  {/* Left content */}
-                  <div className="flex items-start gap-3.5">
-                    {/* Severity Icon Indicator */}
-                    <div className="mt-0.5">
-                      {action.severity === 'urgent' ? (
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500/20 text-rose-400">
-                          <Flame className="h-4 w-4" />
-                        </div>
-                      ) : action.severity === 'attention' ? (
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400">
-                          <AlertTriangle className="h-4 w-4" />
-                        </div>
-                      ) : (
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/20 text-blue-400">
-                          <Percent className="h-4 w-4" />
-                        </div>
+                  {/* Left: Action summary & SKU info */}
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                          action.severity === 'urgent'
+                            ? 'bg-rose-100 text-rose-700 border border-rose-200'
+                            : action.severity === 'attention'
+                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                            : 'bg-indigo-100 text-indigo-700 border border-indigo-200'
+                        }`}
+                      >
+                        {action.severity}
+                      </span>
+                      <span className="text-xs font-semibold text-slate-900">{action.productName}</span>
+                      <span className="text-[11px] font-mono text-slate-500">({sku})</span>
+                      
+                      {isApproved && (
+                        <span className="flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 border border-emerald-200">
+                          <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Approved & Synced
+                        </span>
                       )}
                     </div>
 
-                    {/* Text & SKU */}
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                            action.severity === 'urgent'
-                              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                              : action.severity === 'attention'
-                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                              : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
-                          }`}
-                        >
-                          {action.severity}
-                        </span>
-                        <span className="text-xs font-mono font-medium text-slate-400">{action.productSku}</span>
-                        <span className="text-xs font-semibold text-white">{action.productName}</span>
-                        
-                        {isApproved && (
-                          <span className="flex items-center gap-1 rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 border border-emerald-500/40">
-                            <CheckCircle2 className="h-3 w-3" /> Approved & Tracked
-                          </span>
-                        )}
-                      </div>
+                    <p className="text-xs font-semibold text-slate-800">{action.title}</p>
+                    <p className="text-[11px] text-slate-600 leading-relaxed max-w-3xl">{reason}</p>
 
-                      <p className="text-xs font-medium text-slate-200">{action.title}</p>
-                      <p className="text-[11px] text-slate-400 leading-relaxed max-w-2xl">{action.description}</p>
-
-                      <div className="flex items-center gap-4 pt-1 text-[11px] text-slate-400">
-                        <span>Avoided Loss: <strong className="text-emerald-400">${action.avoidedLossEstimate.toLocaleString()}</strong></span>
-                        <span>•</span>
-                        <span>Risk Index: <strong className={action.riskScore >= 75 ? 'text-rose-400' : 'text-amber-400'}>{action.riskScore}/100</strong></span>
-                        {matchingProduct && (
-                          <>
-                            <span>•</span>
-                            <span>Stock on hand: <strong className="text-slate-200">{matchingProduct.currentStock} units</strong></span>
-                          </>
-                        )}
-                      </div>
+                    <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] text-slate-500">
+                      <span>Avoided Loss: <strong className="text-emerald-700">{formatBDT(action.avoidedLossEstimate)}</strong></span>
+                      <span>•</span>
+                      {matchingProduct && (
+                        <span>Stock on Hand: <strong className="text-slate-800">{matchingProduct.currentStock} units</strong></span>
+                      )}
                     </div>
                   </div>
 
-                  {/* Right: Actions */}
-                  <div className="flex flex-wrap items-center gap-2 self-end lg:self-center">
-                    
-                    {/* View Reason / Explainable AI Button */}
+                  {/* Right: Interactive Action Buttons */}
+                  <div className="flex items-center gap-2 self-end lg:self-center">
                     <button
                       onClick={() => onOpenWhyModal(action)}
-                      className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs font-medium text-slate-200 transition-all hover:bg-slate-700 hover:text-white"
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-xs"
                     >
-                      <HelpCircle className="h-3.5 w-3.5 text-indigo-400" />
-                      Why? / View Reason
+                      Why?
                     </button>
 
-                    {/* Human-in-the-Loop Approval Action */}
                     {!isApproved ? (
                       <button
                         onClick={() => onApproveAction(action)}
-                        className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition-all ${
+                        className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-bold text-white shadow-xs transition-all ${
                           action.severity === 'urgent'
-                            ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/20'
+                            ? 'bg-rose-600 hover:bg-rose-700'
                             : action.severity === 'attention'
-                            ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/20'
-                            : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/20'
+                            ? 'bg-amber-600 hover:bg-amber-700'
+                            : 'bg-emerald-600 hover:bg-emerald-700'
                         }`}
                       >
                         <CheckCircle2 className="h-3.5 w-3.5" />
-                        {action.actionType === 'approve_reorder'
-                          ? `Approve Reorder (${action.recommendedQuantity} units)`
-                          : action.actionType === 'adjust_safety_stock'
-                          ? `Adjust Buffer (${action.recommendedSafetyStock} units)`
-                          : `Launch ${action.discountPercent}% Clearance`}
+                        {action.actionType === 'adjust_buffer' || action.actionType === 'adjust_safety_stock'
+                          ? `Set Buffer (${qty} units)`
+                          : action.actionType === 'liquidate' || action.actionType === 'launch_clearance'
+                          ? 'Discount 30%'
+                          : `Approve Reorder (${qty} units)`}
                       </button>
                     ) : (
-                      <div className="text-xs font-medium text-emerald-400 px-2 py-1">
-                        Action Active in PO Queue
-                      </div>
+                      <span className="text-xs font-medium text-emerald-700 px-2 py-1">
+                        Active in PO Queue
+                      </span>
                     )}
 
-                    {/* Drill-down link */}
                     {matchingProduct && (
                       <button
                         onClick={() => onSelectProduct(matchingProduct)}
-                        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
-                        title="SKU Deep Dive"
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-900"
+                        title="View SKU Details"
                       >
                         <ChevronRight className="h-4 w-4" />
                       </button>
@@ -391,64 +337,28 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       </div>
 
       {/* ------------------------------------------------------------- */}
-      {/* SECTION 3: CATEGORY HEALTH & QUICK VELOCITY MATRIX            */}
+      {/* SECTION 3: FASTEST MOVERS & DEAD STOCK RECOVERY                */}
       {/* ------------------------------------------------------------- */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         
-        {/* Category Breakdown Card */}
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-lg backdrop-blur-md">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-white">Portfolio Category Health</h3>
-            <span className="text-xs text-slate-400">Valuation Share</span>
-          </div>
-          <div className="mt-4 space-y-3.5">
-            {categoryStats.map((item) => {
-              const pct = totalValuation > 0 ? (item.valuation / totalValuation) * 100 : 0;
-              return (
-                <div key={item.category} className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium text-slate-200">{item.category}</span>
-                    <div className="flex items-center gap-2">
-                      {item.criticalCount > 0 && (
-                        <span className="rounded bg-rose-500/20 px-1.5 py-0.2 text-[10px] text-rose-400 border border-rose-500/30">
-                          {item.criticalCount} at risk
-                        </span>
-                      )}
-                      <span className="font-semibold text-slate-300">${item.valuation.toLocaleString()}</span>
-                      <span className="text-[10px] text-slate-500">({pct.toFixed(0)}%)</span>
-                    </div>
-                  </div>
-                  <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
-                    <div 
-                      className={`h-full rounded-full ${
-                        item.criticalCount > 0 ? 'bg-amber-500' : 'bg-indigo-500'
-                      }`}
-                      style={{ width: `${pct}%` }}
-                    ></div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Top Velocity Movers */}
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-lg backdrop-blur-md">
-          <div className="flex items-center justify-between">
+        {/* Fastest Movers (High Daily Demand) */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
             <div className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-emerald-400" />
-              <h3 className="text-sm font-bold text-white">Fastest Velocity SKUs</h3>
+              <TrendingUp className="h-4 w-4 text-emerald-600" />
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Fastest Daily Velocity SKUs</h3>
             </div>
             <button 
               onClick={() => onNavigateTab('forecasting')}
-              className="text-xs text-indigo-400 hover:text-indigo-300"
+              className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
             >
-              Forecast &rarr;
+              Forecast View &rarr;
             </button>
           </div>
-          <div className="mt-4 space-y-2.5">
+
+          <div className="mt-3 space-y-2">
             {products
-              .filter(p => p.dailyDemand > 5)
+              .filter(p => p.dailyDemand > 3)
               .sort((a, b) => b.dailyDemand - a.dailyDemand)
               .slice(0, 4)
               .map(p => {
@@ -457,15 +367,15 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                   <div
                     key={p.id}
                     onClick={() => onSelectProduct(p)}
-                    className="flex items-center justify-between rounded-lg border border-slate-800/60 bg-slate-950/40 p-2.5 transition-all hover:border-slate-700 hover:bg-slate-800/40 cursor-pointer"
+                    className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50/60 p-2.5 hover:border-slate-300 hover:bg-slate-100/60 cursor-pointer transition-colors"
                   >
                     <div>
-                      <p className="text-xs font-semibold text-white">{p.name}</p>
-                      <p className="text-[10px] text-slate-400">{p.sku} • {p.category}</p>
+                      <p className="text-xs font-semibold text-slate-900">{p.name}</p>
+                      <p className="text-[10px] text-slate-500">{p.sku} • {formatBDT(p.unitPrice)}/unit</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs font-bold text-emerald-400">{p.dailyDemand} /day</p>
-                      <p className={`text-[10px] ${Number(daysRemaining) <= p.leadTimeDays ? 'text-rose-400 font-semibold' : 'text-slate-400'}`}>
+                      <p className="text-xs font-bold text-emerald-700">{p.dailyDemand} units/day</p>
+                      <p className={`text-[10px] ${Number(daysRemaining) <= p.leadTimeDays ? 'text-rose-600 font-semibold' : 'text-slate-500'}`}>
                         {daysRemaining}d stock left
                       </p>
                     </div>
@@ -475,23 +385,24 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
           </div>
         </div>
 
-        {/* Stagnant / Dead Capital Recovery */}
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-lg backdrop-blur-md">
-          <div className="flex items-center justify-between">
+        {/* Dead Stock & Stagnant Items */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
             <div className="flex items-center gap-2">
-              <TrendingDown className="h-4 w-4 text-amber-400" />
-              <h3 className="text-sm font-bold text-white">Dead Capital Recovery</h3>
+              <TrendingDown className="h-4 w-4 text-amber-600" />
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Dead Stock Capital Recovery</h3>
             </div>
             <button 
               onClick={() => onNavigateTab('catalog')}
-              className="text-xs text-amber-400 hover:text-amber-300"
+              className="text-xs font-semibold text-amber-700 hover:text-amber-800"
             >
-              Catalog &rarr;
+              Catalog View &rarr;
             </button>
           </div>
-          <div className="mt-4 space-y-2.5">
+
+          <div className="mt-3 space-y-2">
             {products
-              .filter(p => p.status === 'dead_stock' || p.daysWithoutSale >= 20)
+              .filter(p => p.status === 'dead_stock' || p.daysWithoutSale >= 15)
               .slice(0, 4)
               .map(p => {
                 const lockedVal = p.currentStock * p.unitPrice;
@@ -499,15 +410,15 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                   <div
                     key={p.id}
                     onClick={() => onSelectProduct(p)}
-                    className="flex items-center justify-between rounded-lg border border-amber-500/20 bg-amber-950/10 p-2.5 transition-all hover:border-amber-500/40 hover:bg-amber-950/20 cursor-pointer"
+                    className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50/50 p-2.5 hover:border-amber-300 hover:bg-amber-100/50 cursor-pointer transition-colors"
                   >
                     <div>
-                      <p className="text-xs font-semibold text-amber-200">{p.name}</p>
-                      <p className="text-[10px] text-amber-400/80">{p.daysWithoutSale} days with 0 sales</p>
+                      <p className="text-xs font-semibold text-slate-900">{p.name}</p>
+                      <p className="text-[10px] text-amber-700">{p.daysWithoutSale} days with 0 sales</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs font-bold text-amber-300">${lockedVal.toLocaleString()}</p>
-                      <p className="text-[10px] text-slate-400">{p.currentStock} units idle</p>
+                      <p className="text-xs font-bold text-amber-800">{formatBDT(lockedVal)}</p>
+                      <p className="text-[10px] text-slate-500">{p.currentStock} units locked</p>
                     </div>
                   </div>
                 );

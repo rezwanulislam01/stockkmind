@@ -245,6 +245,26 @@ export function calculateDeadStockCapital(products: Product[]): number {
 }
 
 /**
+ * Formats a monetary amount into Bangladeshi Taka (BDT / ৳)
+ * with support for standard South Asian lakh/crore formatting or compact mode.
+ */
+export function formatBDT(amount: number, compact: boolean = false): string {
+  if (isNaN(amount) || amount === null || amount === undefined) return '৳ 0';
+  if (compact) {
+    if (Math.abs(amount) >= 10000000) {
+      return `৳ ${(amount / 10000000).toFixed(2)} Cr`;
+    }
+    if (Math.abs(amount) >= 100000) {
+      return `৳ ${(amount / 100000).toFixed(2)} L`;
+    }
+    if (Math.abs(amount) >= 1000) {
+      return `৳ ${(amount / 1000).toFixed(1)}k`;
+    }
+  }
+  return `৳ ${Math.round(amount).toLocaleString('en-IN')}`;
+}
+
+/**
  * Interactive What-If Scenario Engine
  */
 export function simulateScenario(product: Product, params: ScenarioParams) {

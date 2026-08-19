@@ -1,20 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Search, 
-  Filter, 
   ArrowUpDown, 
-  HelpCircle, 
-  Plus, 
-  TrendingUp, 
-  ShoppingCart, 
+  ChevronRight,
   Flame, 
   AlertTriangle, 
   CheckCircle2, 
-  Percent, 
-  ChevronRight,
-  Sparkles
+  Percent
 } from 'lucide-react';
-import { Product, ProductCategory, StockStatus } from '../types';
+import { Product } from '../types';
+import { formatBDT } from '../utils/forecasting';
 
 interface ProductCatalogTableProps {
   products: Product[];
@@ -74,14 +69,14 @@ export const ProductCatalogTable: React.FC<ProductCatalogTableProps> = ({
   };
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-4 pb-12">
       
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-lg backdrop-blur-md">
+      {/* Search and Filters Bar */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
         <div>
-          <h2 className="text-base font-bold text-white tracking-tight">Master SKU Inventory Catalog & Velocity</h2>
-          <p className="mt-1 text-xs text-slate-400">
-            Real-time stock on hand, daily velocity run-rate, days to depletion, and automated risk scoring.
+          <h2 className="text-base font-bold text-slate-900 tracking-tight">Bangladesh SME Product Catalog & Inventory</h2>
+          <p className="text-xs text-slate-500">
+            Real-time stock on hand, daily demand rate in Bangladesh retail, and runway calculation.
           </p>
         </div>
 
@@ -90,27 +85,26 @@ export const ProductCatalogTable: React.FC<ProductCatalogTableProps> = ({
           <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Search SKU or Product name..."
+            placeholder="Search SKU or product..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-xl border border-slate-700 bg-slate-800/90 py-2 pl-9 pr-4 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-4 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
           />
         </div>
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        
+      <div className="flex flex-wrap items-center justify-between gap-2">
         {/* Category Pills */}
-        <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-800 bg-slate-900/60 p-1">
+        <div className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-xs">
           {categories.map((cat) => (
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`rounded-lg px-3 py-1 text-xs font-medium transition-all ${
+              className={`rounded-md px-3 py-1 text-xs font-semibold transition-all ${
                 selectedCategory === cat
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
               {cat}
@@ -119,65 +113,61 @@ export const ProductCatalogTable: React.FC<ProductCatalogTableProps> = ({
         </div>
 
         {/* Status Filter */}
-        <div className="flex items-center gap-1 rounded-xl border border-slate-800 bg-slate-900/60 p-1">
+        <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-xs">
           {statuses.map((st) => (
             <button
               key={st}
               onClick={() => setSelectedStatus(st)}
-              className={`capitalize rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
+              className={`capitalize rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
                 selectedStatus === st
-                  ? 'bg-slate-700 text-white'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-slate-900 text-white'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
               {st === 'dead_stock' ? 'Dead Stock' : st}
             </button>
           ))}
         </div>
-
       </div>
 
-      {/* Data Table Card */}
-      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 shadow-xl backdrop-blur-md">
+      {/* Clean Data Table */}
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            
-            {/* Table Head */}
-            <thead className="border-b border-slate-800 bg-slate-950/70 text-slate-400">
+            <thead className="border-b border-slate-100 bg-slate-50/80 text-slate-600">
               <tr>
                 <th className="px-4 py-3 font-semibold">
-                  <button onClick={() => handleSort('name')} className="flex items-center gap-1 hover:text-white">
+                  <button onClick={() => handleSort('name')} className="flex items-center gap-1 hover:text-slate-900">
                     Product / SKU <ArrowUpDown className="h-3 w-3" />
                   </button>
                 </th>
                 <th className="px-4 py-3 font-semibold">Category</th>
                 <th className="px-4 py-3 font-semibold">
-                  <button onClick={() => handleSort('currentStock')} className="flex items-center gap-1 hover:text-white">
+                  <button onClick={() => handleSort('currentStock')} className="flex items-center gap-1 hover:text-slate-900">
                     Stock On Hand <ArrowUpDown className="h-3 w-3" />
                   </button>
                 </th>
                 <th className="px-4 py-3 font-semibold">
-                  <button onClick={() => handleSort('dailyDemand')} className="flex items-center gap-1 hover:text-white">
+                  <button onClick={() => handleSort('dailyDemand')} className="flex items-center gap-1 hover:text-slate-900">
                     Daily Velocity <ArrowUpDown className="h-3 w-3" />
                   </button>
                 </th>
                 <th className="px-4 py-3 font-semibold">Runway</th>
-                <th className="px-4 py-3 font-semibold">Valuation</th>
+                <th className="px-4 py-3 font-semibold">Valuation (BDT)</th>
                 <th className="px-4 py-3 font-semibold">
-                  <button onClick={() => handleSort('riskScore')} className="flex items-center gap-1 hover:text-white">
+                  <button onClick={() => handleSort('riskScore')} className="flex items-center gap-1 hover:text-slate-900">
                     Risk Score <ArrowUpDown className="h-3 w-3" />
                   </button>
                 </th>
-                <th className="px-4 py-3 font-semibold text-right">Quick Actions</th>
+                <th className="px-4 py-3 font-semibold text-right">Actions</th>
               </tr>
             </thead>
 
-            {/* Table Body */}
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-slate-100">
               {filteredProducts.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="p-8 text-center text-slate-500">
-                    No matching SKUs found.
+                    No matching products found.
                   </td>
                 </tr>
               ) : (
@@ -191,119 +181,103 @@ export const ProductCatalogTable: React.FC<ProductCatalogTableProps> = ({
                   return (
                     <tr 
                       key={p.id} 
-                      className="hover:bg-slate-800/40 transition-colors group cursor-pointer"
+                      className="hover:bg-slate-50 transition-colors group cursor-pointer"
                       onClick={() => onSelectProduct(p)}
                     >
-                      {/* Product Name & SKU */}
                       <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-2.5">
-                          <div>
-                            <p className="font-semibold text-slate-100 group-hover:text-indigo-300 transition-colors">
-                              {p.name}
-                            </p>
-                            <span className="font-mono text-[10px] text-slate-400">{p.sku}</span>
-                          </div>
+                        <div>
+                          <p className="font-semibold text-slate-900 group-hover:text-emerald-700 transition-colors">
+                            {p.name}
+                          </p>
+                          <span className="font-mono text-[10px] text-slate-400">{p.sku}</span>
                         </div>
                       </td>
 
-                      {/* Category */}
-                      <td className="px-4 py-3.5 text-slate-300">
-                        <span className="rounded-md border border-slate-700/60 bg-slate-800/40 px-2 py-0.5 text-[11px]">
+                      <td className="px-4 py-3.5 text-slate-600">
+                        <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px]">
                           {p.category}
                         </span>
                       </td>
 
-                      {/* On Hand Stock */}
                       <td className="px-4 py-3.5">
-                        <span className="font-bold text-slate-100">{p.currentStock} units</span>
-                        <div className="text-[10px] text-slate-500">Buffer: {p.safetyStock}</div>
+                        <span className="font-bold text-slate-900">{p.currentStock} units</span>
+                        <div className="text-[10px] text-slate-500">Safety Buffer: {p.safetyStock}</div>
                       </td>
 
-                      {/* Daily Velocity */}
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-1.5">
-                          <span className={`font-semibold ${p.dailyDemand > 0 ? 'text-emerald-400' : 'text-slate-500'}`}>
+                          <span className={`font-semibold ${p.dailyDemand > 0 ? 'text-emerald-700' : 'text-slate-500'}`}>
                             {p.dailyDemand} u/day
                           </span>
                           {p.demandTrend !== 0 && (
-                            <span className={`text-[10px] ${p.demandTrend > 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                            <span className={`text-[10px] font-medium ${p.demandTrend > 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
                               ({p.demandTrend > 0 ? '+' : ''}{p.demandTrend}%)
                             </span>
                           )}
                         </div>
                       </td>
 
-                      {/* Runway */}
                       <td className="px-4 py-3.5">
                         {isDeadStock ? (
-                          <span className="text-amber-400 font-medium text-[11px]">{p.daysWithoutSale}d No Sales</span>
+                          <span className="text-amber-700 font-medium text-[11px]">{p.daysWithoutSale}d No Sales</span>
                         ) : (
                           <div>
-                            <span className={`font-bold ${Number(daysLeft) <= p.leadTimeDays ? 'text-rose-400' : 'text-slate-200'}`}>
+                            <span className={`font-bold ${Number(daysLeft) <= p.leadTimeDays ? 'text-rose-600' : 'text-slate-800'}`}>
                               {daysLeft} Days
                             </span>
-                            <div className="text-[10px] text-slate-500">Lead: {p.leadTimeDays}d</div>
+                            <div className="text-[10px] text-slate-400">Lead Time: {p.leadTimeDays}d</div>
                           </div>
                         )}
                       </td>
 
-                      {/* Valuation */}
                       <td className="px-4 py-3.5">
-                        <div className="font-semibold text-slate-200">${valuation.toLocaleString()}</div>
-                        <div className="text-[10px] text-slate-500">${p.unitPrice}/u retail</div>
+                        <div className="font-semibold text-slate-900">{formatBDT(valuation)}</div>
+                        <div className="text-[10px] text-slate-500">{formatBDT(p.unitPrice)} / unit</div>
                       </td>
 
-                      {/* Risk Score Badge */}
                       <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                              isCritical
-                                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                                : isWarning
-                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                                : isDeadStock
-                                ? 'bg-amber-950/40 text-amber-400 border border-amber-500/30'
-                                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                            }`}
-                          >
-                            {isCritical && <Flame className="h-3 w-3" />}
-                            {isWarning && <AlertTriangle className="h-3 w-3" />}
-                            {isDeadStock && <Percent className="h-3 w-3" />}
-                            {!isCritical && !isWarning && !isDeadStock && <CheckCircle2 className="h-3 w-3" />}
-                            {p.riskScore}/100
-                          </span>
-                        </div>
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                            isCritical
+                              ? 'bg-rose-100 text-rose-700 border border-rose-200'
+                              : isWarning
+                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                              : isDeadStock
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                              : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          }`}
+                        >
+                          {isCritical && <Flame className="h-3 w-3 text-rose-600" />}
+                          {isWarning && <AlertTriangle className="h-3 w-3 text-amber-600" />}
+                          {isDeadStock && <Percent className="h-3 w-3 text-amber-600" />}
+                          {!isCritical && !isWarning && !isDeadStock && <CheckCircle2 className="h-3 w-3 text-emerald-600" />}
+                          {p.riskScore}/100
+                        </span>
                       </td>
 
-                      {/* Quick Actions */}
                       <td className="px-4 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1.5">
-                          
                           <button
                             onClick={() => onOpenRecordSale(p)}
-                            className="rounded-lg border border-slate-700 bg-slate-800/80 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-700 hover:text-white"
-                            title="Log Sale"
+                            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-xs"
                           >
                             Sale
                           </button>
 
                           <button
                             onClick={() => onOpenReorder(p)}
-                            className="rounded-lg bg-indigo-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-indigo-500"
-                            title="Open Supplier Reorder"
+                            className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 shadow-xs"
                           >
                             Reorder
                           </button>
 
                           <button
                             onClick={() => onSelectProduct(p)}
-                            className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
-                            title="Explain AI Diagnosis"
+                            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-900"
+                            title="SKU Deep Dive"
                           >
                             <ChevronRight className="h-4 w-4" />
                           </button>
-
                         </div>
                       </td>
                     </tr>
@@ -311,7 +285,6 @@ export const ProductCatalogTable: React.FC<ProductCatalogTableProps> = ({
                 })
               )}
             </tbody>
-
           </table>
         </div>
       </div>

@@ -39,14 +39,13 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-// AI Explain SKU / Action Endpoint using gemini-3.1-pro-preview with HIGH Thinking Mode
+// AI Explain SKU / Action Endpoint
 app.post("/api/ai/explain", async (req, res) => {
   try {
     const { product, actionType, customContext } = req.body;
     const ai = getAIClient();
 
     if (!ai) {
-      // High-quality deterministic fallback if no API key is available
       return res.json({
         success: true,
         source: "deterministic_engine",
@@ -54,7 +53,7 @@ app.post("/api/ai/explain", async (req, res) => {
       });
     }
 
-    const prompt = `You are StockMind's Principal Inventory Intelligence Analyst.
+    const prompt = `You are StockMind BD's Principal Inventory Intelligence Analyst for Bangladesh SMEs.
 Analyze the following inventory item and situation:
 Product: ${product?.name} (SKU: ${product?.sku}, Category: ${product?.category})
 Current Stock: ${product?.currentStock} units
@@ -63,31 +62,29 @@ Average Daily Demand: ${product?.dailyDemand} units/day
 Demand Trend: ${product?.demandTrend > 0 ? '+' : ''}${product?.demandTrend}%
 Lead Time: ${product?.leadTimeDays} days
 Days to Stockout: ${(product?.currentStock / Math.max(0.1, product?.dailyDemand)).toFixed(1)} days
+Unit Price: ৳${product?.unitPrice} BDT
+Cost Price: ৳${product?.costPrice} BDT
 Risk Score: ${product?.riskScore}/100
 Action context: ${actionType || "Risk & Reorder assessment"}
 Additional notes: ${customContext || "None"}
 
-Provide a crisp, executive-grade explainable AI diagnosis with:
-1. Root Cause (Why this risk / status occurred)
-2. Quantitative Trade-off (Cost of stockout vs cost of holding)
+Provide a crisp, executive-grade explainable AI diagnosis formatted in Bangladeshi Taka (৳ BDT):
+1. Root Cause (Why this risk / status occurred in Bangladesh retail supply chain)
+2. Quantitative Trade-off (Cost of stockout vs cost of holding in ৳ BDT)
 3. Specific Recommended Action with timeline
-4. Supplier strategy note
+4. Bangladesh Supplier/Distributor routing note (e.g. Dhaka, Narayanganj, Gazipur, Chattogram hubs)
 
-Format as clear, scannable JSON with fields:
+Format as valid JSON with fields:
 - summary: string (2 sentences max)
 - rootCauses: array of strings (2-3 items)
 - financialImpact: string
 - recommendedAction: string
 - supplierTip: string`;
 
-    // Using gemini-3.1-pro-preview with ThinkingLevel.HIGH
     const response = await ai.models.generateContent({
-      model: "gemini-3.1-pro-preview",
+      model: "gemini-3.7-flash",
       contents: prompt,
       config: {
-        thinkingConfig: {
-          thinkingLevel: ThinkingLevel.HIGH,
-        },
         responseMimeType: "application/json",
         temperature: 0.2,
       },
@@ -97,12 +94,11 @@ Format as clear, scannable JSON with fields:
     const parsed = JSON.parse(text);
     return res.json({
       success: true,
-      source: "gemini-3.1-pro-preview (High Thinking)",
+      source: "gemini-3.7-flash",
       analysis: parsed,
     });
   } catch (error: any) {
     console.error("AI Explain error:", error);
-    // Graceful fallback to deterministic analysis
     return res.json({
       success: true,
       source: "deterministic_fallback",
@@ -111,56 +107,106 @@ Format as clear, scannable JSON with fields:
   }
 });
 
-// AI Chat Endpoint with Context Injection & High Thinking Mode
+// Multi-Turn AI Chatbot Endpoint supporting Models & Roles
 app.post("/api/ai/chat", async (req, res) => {
   try {
-    const { message, inventorySummary, recentActions, useHighThinking = true } = req.body;
+    const { 
+      message, 
+      conversationHistory = [], 
+      inventorySummary, 
+      recentActions, 
+      model = "gemini-3.7-flash",
+      role = "inventory_strategist"
+    } = req.body;
     const ai = getAIClient();
 
     if (!ai) {
       return res.json({
         success: true,
         source: "deterministic_engine",
+        model: "offline_deterministic",
         reply: generateFallbackChatReply(message, inventorySummary),
       });
     }
 
-    const systemInstruction = `You are StockMind's AI Inventory Operations Manager and Decision Intelligence Specialist for SMEs.
-You provide precise, data-driven, actionable recommendations.
-Keep answers concise, structured, and practical. Use Markdown with bold key terms and bullet points.
-Inventory Snapshot:
-Total SKUs: ${inventorySummary?.totalProducts || 18}
-Health Score: ${inventorySummary?.healthScore || 78}/100
-Total Valuation: $${inventorySummary?.totalValuation || 42800}
-Dead Capital: $${inventorySummary?.deadCapital || 6970}
-Critical Stockout Items: ${inventorySummary?.criticalCount || 2}
-Attention Items: ${inventorySummary?.attentionCount || 3}
-Top Risk Items: ${JSON.stringify(inventorySummary?.topRiskItems || [])}
-Recent Actions Taken: ${JSON.stringify(recentActions || [])}`;
+    // Dynamic System Instruction based on Role
+    let roleDescription = "Principal Inventory Intelligence Specialist for Bangladesh SMEs";
+    if (role === "financial_controller") {
+      roleDescription = "Chief Financial Controller specializing in working capital, dead-stock cash recovery, and holding cost minimization in ৳ BDT";
+    } else if (role === "risk_logistics") {
+      roleDescription = "Supply Chain Risk & Logistics Specialist focusing on transit delays, supplier lead times, and distributor routing across Dhaka, Gazipur, and Chattogram";
+    }
 
-    // Use gemini-3.1-pro-preview with ThinkingLevel.HIGH for deep reasoning
+    const systemInstruction = `You are StockMind BD's ${roleDescription}.
+You advise SME business owners, wholesalers, and retail operators in Bangladesh.
+All currency values MUST be in Bangladeshi Taka (৳ BDT).
+Keep responses structured, highly actionable, concise, and professional using Markdown (headers, bullet points, bold key terms).
+
+Current Real-Time Inventory Snapshot:
+- Total SKUs: ${inventorySummary?.totalProducts || 18}
+- Inventory Health Score: ${inventorySummary?.healthScore || 82}/100
+- Total Inventory Asset Valuation: ৳${(inventorySummary?.totalValuation || 284000).toLocaleString()} BDT
+- Dead Stock Capital Locked: ৳${(inventorySummary?.deadCapital || 38500).toLocaleString()} BDT
+- Critical Stockout SKUs: ${inventorySummary?.criticalCount || 2}
+- Attention Alerts: ${inventorySummary?.attentionCount || 3}
+- High Risk Products: ${JSON.stringify(inventorySummary?.topRiskItems || [])}
+- Approved Recent Actions: ${JSON.stringify(recentActions || [])}`;
+
+    // Select valid model based on request
+    let selectedModel = "gemini-3.7-flash";
+    let isThinking = false;
+    if (model === "gemini-3.1-pro-preview" || model === "pro") {
+      selectedModel = "gemini-3.1-pro-preview";
+      isThinking = true;
+    } else if (model === "gemini-3.1-flash-lite" || model === "lite") {
+      selectedModel = "gemini-3.1-flash-lite";
+    } else if (model === "gemini-3.5-flash") {
+      selectedModel = "gemini-3.5-flash";
+    }
+
+    // Build multi-turn contents array
+    const contents: any[] = [];
+    if (Array.isArray(conversationHistory) && conversationHistory.length > 0) {
+      for (const msg of conversationHistory) {
+        if (msg.role === "user" || msg.sender === "user") {
+          contents.push({ role: "user", parts: [{ text: msg.text || msg.content }] });
+        } else if (msg.role === "model" || msg.role === "assistant" || msg.sender === "assistant") {
+          contents.push({ role: "model", parts: [{ text: msg.text || msg.content }] });
+        }
+      }
+    }
+    // Add current user message
+    contents.push({ role: "user", parts: [{ text: message }] });
+
+    const config: any = {
+      systemInstruction,
+      temperature: 0.3,
+    };
+
+    if (isThinking && selectedModel === "gemini-3.1-pro-preview") {
+      config.thinkingConfig = {
+        thinkingLevel: ThinkingLevel.HIGH,
+      };
+    }
+
     const response = await ai.models.generateContent({
-      model: "gemini-3.1-pro-preview",
-      contents: message,
-      config: {
-        thinkingConfig: {
-          thinkingLevel: ThinkingLevel.HIGH,
-        },
-        systemInstruction,
-        temperature: 0.3,
-      },
+      model: selectedModel,
+      contents,
+      config,
     });
 
     return res.json({
       success: true,
-      source: "gemini-3.1-pro-preview (High Thinking)",
-      reply: response.text || "I have analyzed your inventory state. Everything looks operational.",
+      source: `${selectedModel} (${role})`,
+      model: selectedModel,
+      reply: response.text || "I have analyzed your Bangladesh inventory state. All metrics evaluated.",
     });
   } catch (error: any) {
     console.error("AI Chat error:", error);
     return res.json({
       success: true,
       source: "deterministic_fallback",
+      model: "fallback",
       reply: generateFallbackChatReply(req.body.message, req.body.inventorySummary),
     });
   }
@@ -169,11 +215,11 @@ Recent Actions Taken: ${JSON.stringify(recentActions || [])}`;
 function generateFallbackAnalysis(product: any, actionType?: string) {
   if (!product) {
     return {
-      summary: "Inventory state evaluated. Maintain regular cycle counting.",
+      summary: "Inventory state evaluated. Maintain standard weekly audit cycle.",
       rootCauses: ["Standard operational baseline"],
       financialImpact: "Low immediate risk",
       recommendedAction: "Review weekly inventory dashboard.",
-      supplierTip: "Maintain standard ordering schedules.",
+      supplierTip: "Maintain standard ordering schedules with local distributors.",
     };
   }
 
@@ -183,13 +229,13 @@ function generateFallbackAnalysis(product: any, actionType?: string) {
   if (isDeadStock) {
     const lockedCapital = (product.currentStock * product.unitPrice).toLocaleString();
     return {
-      summary: `${product.name} has recorded zero sales for ${product.daysWithoutSale || 28} consecutive days, locking $${lockedCapital} in idle working capital.`,
+      summary: `${product.name} has recorded zero sales for ${product.daysWithoutSale || 28} consecutive days, locking ৳${lockedCapital} BDT in idle working capital.`,
       rootCauses: [
         `Zero demand velocity over the last month with ${product.currentStock} units unmoving.`,
-        "Holding cost accumulation exceeding 18% annual inventory carry rate.",
+        "Holding cost accumulation exceeding 15% annual inventory carry rate in Bangladesh warehouse.",
       ],
-      financialImpact: `$${lockedCapital} in locked liquidity with ongoing warehouse storage depreciation.`,
-      recommendedAction: "Launch an immediate 25% clearance promotion or bundle with high-velocity category complement.",
+      financialImpact: `৳${lockedCapital} BDT in locked liquidity with ongoing storage depreciation.`,
+      recommendedAction: "Launch an immediate 20% clearance promotion or bundle with grocery staples.",
       supplierTip: "Pause future purchase orders until on-hand stock is reduced below 20 units.",
     };
   }
@@ -200,11 +246,11 @@ function generateFallbackAnalysis(product: any, actionType?: string) {
       rootCauses: [
         `Current on-hand inventory (${product.currentStock} units) is below safety threshold (${product.safetyStock} units).`,
         `Demand velocity of ${product.dailyDemand} units/day will deplete stock before regular replenishment arrives.`,
-        `Supplier lead time is ${product.leadTimeDays} days, leaving zero buffer.`,
+        `Supplier transit from distributor is ${product.leadTimeDays} days, leaving zero buffer.`,
       ],
-      financialImpact: `Estimated immediate stockout revenue loss of $${(product.dailyDemand * product.unitPrice * 5).toFixed(0)} plus customer churn risk.`,
+      financialImpact: `Estimated immediate stockout revenue loss of ৳${(product.dailyDemand * product.unitPrice * 5).toLocaleString()} BDT plus customer churn.`,
       recommendedAction: `Approve expedited Purchase Order for 80 units immediately to avoid stockout by day ${Math.floor(Number(daysToStockout))}.`,
-      supplierTip: "Select the fastest reliable supplier with expedited 2-day transit option.",
+      supplierTip: "Select the nearest Dhaka/Narayanganj distributor for 1-2 day expedited dispatch.",
     };
   }
 
@@ -216,46 +262,46 @@ function generateFallbackAnalysis(product: any, actionType?: string) {
     ],
     financialImpact: "Moderate risk of temporary stockouts during peak ordering hours.",
     recommendedAction: `Increase dynamic safety stock from ${product.safetyStock} to ${Math.round(product.safetyStock * 1.35)} units.`,
-    supplierTip: "Notify primary supplier of 20% increased monthly forecasted run-rate.",
+    supplierTip: "Notify primary distributor of 20% increased monthly forecasted run-rate.",
   };
 }
 
 function generateFallbackChatReply(query: string, summary: any) {
   const q = (query || "").toLowerCase();
-  if (q.includes("cooking oil") || q.includes("oil")) {
-    return `### 🚨 Urgent Assessment: Cooking Oil
+  if (q.includes("oil") || q.includes("radhuni") || q.includes("mustard")) {
+    return `### 🚨 Urgent Assessment: Radhuni Pure Mustard Oil 1L
 - **Status**: Critical Stockout Risk (Score: 88/100)
-- **Stock on Hand**: 40 units (~4.7 days remaining at 8.5 units/day)
-- **Supplier Lead Time**: 3 days
-- **Recommendation**: Place an expedited Reorder of **80 units** right away. Choosing Supplier B (2 days lead time) prevents a 24-hour stockout gap.`;
+- **Stock on Hand**: 35 units (~4.4 days remaining at 8.0 units/day)
+- **Supplier Lead Time**: 3 days (Square Consumer Products)
+- **Recommendation**: Place an expedited Reorder of **75 units** immediately. Selecting the Tejgaon depot (1 day lead time) prevents weekend stock depletion.`;
   }
-  if (q.includes("sugar")) {
-    return `### 📈 Trend Alert: White Sugar
-- **Status**: Demand Surge (+23% velocity)
-- **Stock on Hand**: 85 units (~7.1 days coverage)
-- **Recommendation**: Increase dynamic safety stock buffer from 30 to 45 units to absorb demand spikes.`;
+  if (q.includes("rice") || q.includes("miniket")) {
+    return `### 📈 Trend Alert: Premium Miniket Rice 25kg
+- **Status**: Demand Surge (+20% velocity)
+- **Stock on Hand**: 45 bags (~9.0 days coverage)
+- **Recommendation**: Increase dynamic safety stock buffer from 15 to 25 bags to absorb weekend household demand.`;
   }
-  if (q.includes("shampoo") || q.includes("dead stock")) {
-    return `### 🟡 Dead Capital Alert: Luxury Shampoo
-- **Status**: 0 sales in past 28 days
-- **Locked Capital**: $2,160 (120 units at $18/unit)
-- **Recommendation**: Trigger a 25% promotional discount or bundle with organic personal care items to recover cash flow.`;
+  if (q.includes("dead stock") || q.includes("capital") || q.includes("shampoo")) {
+    return `### 🟡 Dead Capital Alert: Luxury Shampoo / LED Bulb
+- **Status**: 0 sales in past 30 days
+- **Locked Capital**: ৳38,500 BDT across stagnant SKUs
+- **Recommendation**: Trigger a 20% clearance discount or combo-bundle with FMCG essentials to unlock liquidity.`;
   }
   if (q.includes("health") || q.includes("score")) {
-    return `### 📊 Inventory Health Snapshot
-- **Overall Health Score**: **${summary?.healthScore || 78}/100**
+    return `### 📊 Inventory Health Snapshot (Bangladesh SME)
+- **Overall Health Score**: **${summary?.healthScore || 82}/100**
 - **Total SKUs**: ${summary?.totalProducts || 18} active
-- **Total Valuation**: $${(summary?.totalValuation || 42800).toLocaleString()}
-- **Dead Capital**: $${(summary?.deadCapital || 6970).toLocaleString()} (16.2% of portfolio)
+- **Total Valuation**: ৳${(summary?.totalValuation || 284000).toLocaleString()} BDT
+- **Dead Capital**: ৳${(summary?.deadCapital || 38500).toLocaleString()} BDT (13.5% of portfolio)
 - **Immediate Action Queue**: 2 Critical Stockouts, 3 Attention Alerts.`;
   }
-  return `### 💡 StockMind Decision Intelligence
-I have analyzed your inventory across ${summary?.totalProducts || 18} active SKUs.
-- **Top Priority**: Reorder **Cooking Oil** (4.7 days of stock left vs 3 days lead time).
-- **Secondary**: Adjust safety buffer for **Sugar** due to a +23% demand surge.
-- **Capital Recovery**: Liquidate **Luxury Shampoo** and **Ergonomic Mouse** ($4,880 total dead stock) through targeted clearance.
+  return `### 💡 StockMind BD Decision Intelligence
+I have analyzed your inventory across ${summary?.totalProducts || 18} active SKUs in Bangladesh.
+- **Top Priority**: Reorder **Radhuni Mustard Oil** (4.4 days of stock left vs 3 days lead time).
+- **Secondary**: Adjust safety buffer for **Miniket Rice** due to +20% festive run-rate.
+- **Capital Recovery**: Liquidate stagnant inventory (৳38,500 BDT total dead stock) through targeted wholesale/retail clearance.
 
-You can ask me to evaluate supplier trade-offs, run scenario simulations, or generate custom PO notes!`;
+You can ask me to evaluate supplier trade-offs, run scenario simulations, or generate custom purchase order terms!`;
 }
 
 async function startServer() {

@@ -3,28 +3,31 @@ import {
   X, 
   Send, 
   Sparkles, 
-  Zap, 
-  Database, 
   Brain, 
   RefreshCw, 
-  HelpCircle, 
-  Package, 
-  ChevronRight,
   TrendingDown,
-  Cpu
+  Cpu,
+  User,
+  Copy,
+  Check,
+  Zap,
+  ShieldAlert,
+  Coins
 } from 'lucide-react';
 import { Product, Supplier } from '../types';
-import { routeTokenQuery } from '../utils/tokenRouter';
+import { formatBDT } from '../utils/forecasting';
 
-interface Message {
+export interface ChatMessage {
   id: string;
   sender: 'user' | 'assistant';
   text: string;
   timestamp: string;
-  tier?: 1 | 2 | 3;
-  tierLabel?: string;
-  cost?: string;
+  modelUsed?: string;
+  roleUsed?: string;
 }
+
+export type AssistantRole = 'inventory_strategist' | 'financial_controller' | 'risk_logistics';
+export type GeminiModel = 'gemini-3.7-flash' | 'gemini-3.1-pro-preview' | 'gemini-3.1-flash-lite';
 
 interface AIMultiAssistantProps {
   isOpen: boolean;
@@ -43,20 +46,26 @@ export const AIMultiAssistant: React.FC<AIMultiAssistantProps> = ({
   onSelectProduct,
   onNavigateTab,
 }) => {
-  const [messages, setMessages] = useState<Message[]>([
+  const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
       sender: 'assistant',
-      text: "Hello! I'm StockMind's AI Inventory Intelligence Specialist powered by Gemini 3.1 Pro (High Thinking Mode) & Hybrid Deterministic Routing. Ask me anything about stockout risk, EOQ reordering, vendor trade-offs, or dead stock liquidation.",
+      text: `Hello! I'm StockMind's AI Inventory Intelligence Specialist for Bangladesh. 
+I can analyze real-time demand shifts, compute EOQ reorder quantities, audit dead stock capital, and evaluate supplier trade-offs across Dhaka, Gazipur, and Chattogram.
+
+How can I assist your operations today?`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      tier: 1,
-      tierLabel: 'Deterministic Core (0 Tokens)',
-      cost: '0 Tokens',
+      modelUsed: 'gemini-3.7-flash',
+      roleUsed: 'Inventory Strategist',
     },
   ]);
+
   const [inputQuery, setInputQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isHighThinkingEnabled, setIsHighThinkingEnabled] = useState(true);
+  const [selectedModel, setSelectedModel] = useState<GeminiModel>('gemini-3.7-flash');
+  const [selectedRole, setSelectedRole] = useState<AssistantRole>('inventory_strategist');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -70,97 +79,113 @@ export const AIMultiAssistant: React.FC<AIMultiAssistantProps> = ({
   }, [messages, isOpen]);
 
   const quickPrompts = [
-    "Which SKUs will stock out this week?",
-    "What is the total dead capital locked?",
-    "Provide deep strategic reorder guidance for Cooking Oil",
-    "Analyze vendor trade-offs for Basmati Rice",
+    "Which SKUs are at risk of stockout this week?",
+    "Calculate total locked dead capital in ৳ BDT",
+    "What is the optimal reorder batch for Mustard Oil?",
+    "Evaluate supplier reliability between Square & Meghna",
   ];
+
+  const handleCopy = (id: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleClearHistory = () => {
+    setMessages([
+      {
+        id: 'welcome-' + Date.now(),
+        sender: 'assistant',
+        text: "Conversation history cleared. Ready for your next inventory inquiry.",
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        modelUsed: selectedModel,
+        roleUsed: selectedRole,
+      }
+    ]);
+  };
 
   const handleSendMessage = async (queryText?: string) => {
     const text = queryText || inputQuery;
     if (!text.trim() || isLoading) return;
 
-    const userMsg: Message = {
+    const userMsg: ChatMessage = {
       id: 'msg-' + Date.now(),
       sender: 'user',
       text: text.trim(),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
-    setMessages(prev => [...prev, userMsg]);
+    const newHistory = [...messages, userMsg];
+    setMessages(newHistory);
     setInputQuery('');
     setIsLoading(true);
 
-    // 1. Evaluate Token Router (Deterministic Tiers 1 & 2 vs LLM Tier 3)
-    const routingResult = routeTokenQuery(text, products);
-
-    // If High Thinking is forced or query needs deep strategic reasoning, send to Tier 3
-    const isDeepQuery = text.toLowerCase().includes('strategic') || 
-                        text.toLowerCase().includes('trade-off') || 
-                        text.toLowerCase().includes('guidance') || 
-                        text.toLowerCase().includes('analyze') ||
-                        isHighThinkingEnabled;
-
-    if (!isDeepQuery && (routingResult.tier === 1 || routingResult.tier === 2)) {
-      // Zero token local response!
-      setTimeout(() => {
-        const assistantMsg: Message = {
-          id: 'asst-' + Date.now(),
-          sender: 'assistant',
-          text: routingResult.response || 'Computed directly from real-time database state.',
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          tier: routingResult.tier,
-          tierLabel: routingResult.tier === 1 ? 'Tier 1: Deterministic Engine' : 'Tier 2: Fast SKU Query',
-          cost: '0 Tokens ($0.00)',
-        };
-        setMessages(prev => [...prev, assistantMsg]);
-        setIsLoading(false);
-      }, 400);
-      return;
-    }
-
-    // 2. Tier 3: Call Server-Side Gemini API with gemini-3.1-pro-preview HIGH Thinking
     try {
+      // Prepare conversation history payload for multi-turn Gemini endpoint
+      const conversationPayload = newHistory.map(m => ({
+        role: m.sender === 'user' ? 'user' : 'model',
+        text: m.text,
+      }));
+
+      const topRiskItems = products
+        .filter(p => p.riskScore > 50)
+        .map(p => ({
+          sku: p.sku,
+          name: p.name,
+          currentStock: p.currentStock,
+          dailyDemand: p.dailyDemand,
+          riskScore: p.riskScore,
+          daysToStockout: (p.currentStock / Math.max(0.1, p.dailyDemand)).toFixed(1)
+        }));
+
+      const totalValuation = products.reduce((acc, p) => acc + (p.currentStock * p.unitPrice), 0);
+      const deadCapital = products
+        .filter(p => p.status === 'dead_stock')
+        .reduce((acc, p) => acc + (p.currentStock * p.unitPrice), 0);
+
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: text,
+          message: text.trim(),
+          conversationHistory: conversationPayload,
+          model: selectedModel,
+          role: selectedRole,
           inventorySummary: {
             totalProducts: products.length,
-            topRiskItems: products.filter(p => p.riskScore > 50).map(p => ({
-              sku: p.sku,
-              name: p.name,
-              currentStock: p.currentStock,
-              dailyDemand: p.dailyDemand,
-              riskScore: p.riskScore
-            })),
+            healthScore: Math.round(products.reduce((acc, p) => acc + (100 - p.riskScore), 0) / Math.max(1, products.length)),
+            totalValuation,
+            deadCapital,
+            criticalCount: products.filter(p => p.status === 'critical').length,
+            attentionCount: products.filter(p => p.status === 'warning' || p.status === 'dead_stock').length,
+            topRiskItems,
           },
-          useHighThinking: true,
         }),
       });
 
       const data = await response.json();
-      const assistantMsg: Message = {
+      const assistantMsg: ChatMessage = {
         id: 'asst-' + Date.now(),
         sender: 'assistant',
-        text: data.reply || 'Strategic analysis completed.',
+        text: data.reply || 'Analysis completed successfully.',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        tier: 3,
-        tierLabel: 'Gemini 3.1 Pro (High Thinking)',
-        cost: 'Deep Reasoning Engine',
+        modelUsed: data.model || selectedModel,
+        roleUsed: selectedRole === 'inventory_strategist' 
+          ? 'Inventory Strategist' 
+          : selectedRole === 'financial_controller' 
+          ? 'Financial Controller' 
+          : 'Risk & Logistics',
       };
       setMessages(prev => [...prev, assistantMsg]);
     } catch (err) {
-      // Fallback
-      const assistantMsg: Message = {
+      console.error('Chat error:', err);
+      const assistantMsg: ChatMessage = {
         id: 'asst-' + Date.now(),
         sender: 'assistant',
-        text: routingResult.response || 'Inventory intelligence analysis completed based on current on-hand quantities.',
+        text: `Based on your current Bangladesh catalog, on-hand inventory across ${products.length} SKUs is being tracked. Critical stockout items require immediate attention.`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        tier: 1,
-        tierLabel: 'Tier 1: Deterministic Fallback',
-        cost: '0 Tokens',
+        modelUsed: 'Fallback Engine',
+        roleUsed: 'System Diagnostic',
       };
       setMessages(prev => [...prev, assistantMsg]);
     } finally {
@@ -171,51 +196,120 @@ export const AIMultiAssistant: React.FC<AIMultiAssistantProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl backdrop-blur-xl animate-slideLeft transition-colors">
+    <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col border-l border-slate-800 bg-slate-900 shadow-2xl backdrop-blur-xl">
       
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/90 px-5 py-4">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/20 text-indigo-600 dark:text-indigo-400">
-            <Sparkles className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-              StockMind AI Analyst
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            </h3>
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-              <Cpu className="h-3 w-3 text-indigo-500" />
-              <span>Gemini 3.1 Pro • High Thinking</span>
+      <div className="border-b border-slate-800 bg-slate-950/95 px-5 py-3.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400">
+              <Sparkles className="h-5 w-5" />
             </div>
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                Gemini Copilot
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              </h3>
+              <p className="text-[11px] text-slate-400">Multi-Turn Bangladesh Decision Intelligence</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleClearHistory}
+              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+              title="Clear conversation history"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+            <button
+              onClick={onClose}
+              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
+        {/* Persona / Role Selector */}
+        <div className="mt-3 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
           <button
-            onClick={() => setIsHighThinkingEnabled(!isHighThinkingEnabled)}
-            className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-all border ${
-              isHighThinkingEnabled
-                ? 'bg-purple-500/10 border-purple-500/30 text-purple-600 dark:text-purple-300'
-                : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'
+            onClick={() => setSelectedRole('inventory_strategist')}
+            className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-all ${
+              selectedRole === 'inventory_strategist'
+                ? 'bg-emerald-600 text-white'
+                : 'border border-slate-800 bg-slate-900 text-slate-400 hover:text-slate-200'
             }`}
-            title="Toggle High Thinking reasoning depth"
           >
-            <Brain className="h-3 w-3" />
-            <span>High Thinking</span>
+            <Zap className="h-3 w-3" />
+            <span>Strategist</span>
           </button>
 
           <button
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+            onClick={() => setSelectedRole('financial_controller')}
+            className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-all ${
+              selectedRole === 'financial_controller'
+                ? 'bg-emerald-600 text-white'
+                : 'border border-slate-800 bg-slate-900 text-slate-400 hover:text-slate-200'
+            }`}
           >
-            <X className="h-5 w-5" />
+            <Coins className="h-3 w-3" />
+            <span>Cashflow (৳)</span>
           </button>
+
+          <button
+            onClick={() => setSelectedRole('risk_logistics')}
+            className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-all ${
+              selectedRole === 'risk_logistics'
+                ? 'bg-emerald-600 text-white'
+                : 'border border-slate-800 bg-slate-900 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <ShieldAlert className="h-3 w-3" />
+            <span>Logistics & Risk</span>
+          </button>
+        </div>
+
+        {/* Model Selector Bar */}
+        <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-800/60 pt-2">
+          <span>Model:</span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setSelectedModel('gemini-3.7-flash')}
+              className={`rounded px-2 py-0.5 text-[10px] font-medium transition-all ${
+                selectedModel === 'gemini-3.7-flash'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              gemini-3.7-flash
+            </button>
+            <button
+              onClick={() => setSelectedModel('gemini-3.1-pro-preview')}
+              className={`rounded px-2 py-0.5 text-[10px] font-medium transition-all ${
+                selectedModel === 'gemini-3.1-pro-preview'
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              gemini-3.1-pro
+            </button>
+            <button
+              onClick={() => setSelectedModel('gemini-3.1-flash-lite')}
+              className={`rounded px-2 py-0.5 text-[10px] font-medium transition-all ${
+                selectedModel === 'gemini-3.1-flash-lite'
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              flash-lite
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Messages List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs bg-slate-50/50 dark:bg-slate-900/50">
+      {/* Messages Scrollable Thread */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs bg-slate-950/50">
         
         {messages.map((m) => {
           const isUser = m.sender === 'user';
@@ -224,31 +318,40 @@ export const AIMultiAssistant: React.FC<AIMultiAssistantProps> = ({
               key={m.id}
               className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} space-y-1`}
             >
-              {/* Token Tier Badge */}
-              {!isUser && m.tier && (
-                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-500/30 shadow-xs">
-                  {m.tier === 1 && <Zap className="h-3 w-3 text-amber-500" />}
-                  {m.tier === 2 && <Database className="h-3 w-3 text-blue-500" />}
-                  {m.tier === 3 && <Brain className="h-3 w-3 text-purple-500" />}
-                  <span>{m.tierLabel} ({m.cost})</span>
+              {/* Model & Role Badge for Assistant */}
+              {!isUser && (
+                <div className="flex items-center gap-1.5 text-[10px] text-slate-400 px-1">
+                  <span className="font-semibold text-emerald-400">{m.roleUsed || 'AI Analyst'}</span>
+                  <span>•</span>
+                  <span className="font-mono text-slate-400">{m.modelUsed || selectedModel}</span>
                 </div>
               )}
 
               {/* Message Bubble */}
               <div
-                className={`max-w-[92%] rounded-2xl px-4 py-3 leading-relaxed ${
+                className={`group relative max-w-[90%] rounded-2xl px-4 py-3 leading-relaxed ${
                   isUser
-                    ? 'bg-indigo-600 text-white rounded-br-none shadow-sm'
-                    : 'border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 rounded-bl-none shadow-sm'
+                    ? 'bg-emerald-600 text-white rounded-br-none shadow-md shadow-emerald-600/20'
+                    : 'border border-slate-800 bg-slate-900 text-slate-200 rounded-bl-none shadow-sm'
                 }`}
               >
                 <div className="whitespace-pre-line leading-relaxed">{m.text}</div>
-                <div
-                  className={`mt-1.5 text-[10px] ${
-                    isUser ? 'text-indigo-200 text-right' : 'text-slate-400 dark:text-slate-500'
-                  }`}
-                >
-                  {m.timestamp}
+                
+                <div className="mt-2 flex items-center justify-between text-[10px] text-slate-400">
+                  <span>{m.timestamp}</span>
+                  {!isUser && (
+                    <button
+                      onClick={() => handleCopy(m.id, m.text)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-slate-400 hover:text-white"
+                      title="Copy response"
+                    >
+                      {copiedId === m.id ? (
+                        <Check className="h-3 w-3 text-emerald-400" />
+                      ) : (
+                        <Copy className="h-3 w-3" />
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -256,18 +359,18 @@ export const AIMultiAssistant: React.FC<AIMultiAssistantProps> = ({
         })}
 
         {isLoading && (
-          <div className="flex items-center gap-2 text-xs text-indigo-600 dark:text-indigo-400 p-2 animate-pulse">
+          <div className="flex items-center gap-2 text-xs text-emerald-400 p-2 animate-pulse bg-slate-900/60 rounded-xl border border-slate-800">
             <Brain className="h-4 w-4 animate-spin" />
-            <span>Gemini 3.1 Pro is performing High Thinking analysis...</span>
+            <span>Analyzing inventory snapshot with {selectedModel}...</span>
           </div>
         )}
 
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Suggested Quick Prompts */}
-      <div className="border-t border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/40 p-3">
-        <div className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wider">
+      {/* Suggested Quick Inquiries */}
+      <div className="border-t border-slate-800 bg-slate-950/80 p-3">
+        <div className="text-[10px] font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">
           Suggested Inquiries:
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -275,7 +378,7 @@ export const AIMultiAssistant: React.FC<AIMultiAssistantProps> = ({
             <button
               key={idx}
               onClick={() => handleSendMessage(p)}
-              className="rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900/90 px-2.5 py-1 text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white text-left"
+              className="rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1 text-[11px] text-slate-300 transition-all hover:border-slate-700 hover:bg-slate-800 hover:text-white text-left"
             >
               {p}
             </button>
@@ -284,7 +387,7 @@ export const AIMultiAssistant: React.FC<AIMultiAssistantProps> = ({
       </div>
 
       {/* Chat Input */}
-      <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-4">
+      <div className="border-t border-slate-800 bg-slate-950 p-4">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -294,15 +397,15 @@ export const AIMultiAssistant: React.FC<AIMultiAssistantProps> = ({
         >
           <input
             type="text"
-            placeholder="Ask about inventory, EOQ, risk, or dead capital..."
+            placeholder="Ask about inventory, EOQ, vendor trade-offs, or dead capital (৳)..."
             value={inputQuery}
             onChange={(e) => setInputQuery(e.target.value)}
-            className="flex-1 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
           />
           <button
             type="submit"
             disabled={!inputQuery.trim() || isLoading}
-            className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white transition-all hover:bg-indigo-500 disabled:opacity-40 shadow-sm"
+            className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white transition-all hover:bg-emerald-500 disabled:opacity-40 shadow-sm shadow-emerald-600/30"
           >
             <Send className="h-4 w-4" />
           </button>

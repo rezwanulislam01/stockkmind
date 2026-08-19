@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { 
-  LineChart, 
   Line, 
   Area, 
   XAxis, 
@@ -15,13 +14,8 @@ import {
 import { 
   Sliders, 
   TrendingUp, 
-  Calendar, 
   AlertCircle, 
-  Zap, 
-  Sparkles, 
   Info, 
-  Clock, 
-  ShieldCheck,
   ChevronDown
 } from 'lucide-react';
 import { Product } from '../types';
@@ -31,14 +25,13 @@ interface DemandForecastingViewProps {
   products: Product[];
   selectedProduct: Product | null;
   onSelectProduct: (product: Product) => void;
-  onOpenOrderModal?: (product: Product) => void;
+  onOpenReorderModal?: (product: Product) => void;
 }
 
 export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
   products,
   selectedProduct,
   onSelectProduct,
-  onOpenOrderModal,
 }) => {
   const currentProduct = selectedProduct || products[0] || null;
 
@@ -53,7 +46,7 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
   }, [currentProduct, forecastHorizon, alpha, beta]);
 
   if (!currentProduct) {
-    return <div className="p-8 text-center text-slate-400">No products available for forecasting.</div>;
+    return <div className="p-8 text-center text-slate-500">No products available for forecasting.</div>;
   }
 
   const daysToStockout = (currentProduct.currentStock / Math.max(0.1, currentProduct.dailyDemand)).toFixed(1);
@@ -63,22 +56,22 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
     <div className="space-y-6 pb-12">
       
       {/* Header & Product Selector */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-lg backdrop-blur-md">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
         <div>
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-400">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
               <TrendingUp className="h-4 w-4" />
             </div>
-            <h2 className="text-base font-bold text-white tracking-tight">Demand Forecasting & Predictive Intelligence</h2>
+            <h2 className="text-base font-bold text-slate-900 tracking-tight">Demand Forecasting & Predictive Intelligence</h2>
           </div>
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-slate-500">
             Real-time Double Exponential Smoothing (Holt's Linear) with Gaussian confidence interval bands.
           </p>
         </div>
 
         {/* SKU Selector Dropdown */}
         <div className="flex items-center gap-3">
-          <label className="text-xs font-medium text-slate-400">Target SKU:</label>
+          <label className="text-xs font-medium text-slate-600">Target SKU:</label>
           <div className="relative">
             <select
               value={currentProduct.id}
@@ -86,10 +79,10 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
                 const found = products.find(p => p.id === e.target.value);
                 if (found) onSelectProduct(found);
               }}
-              className="appearance-none rounded-xl border border-slate-700 bg-slate-800/90 py-2 pl-3 pr-9 text-xs font-semibold text-white transition-all hover:bg-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+              className="appearance-none rounded-lg border border-slate-300 bg-white py-2 pl-3 pr-9 text-xs font-semibold text-slate-900 transition-all hover:bg-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer shadow-xs"
             >
               {products.map((p) => (
-                <option key={p.id} value={p.id} className="bg-slate-900 text-slate-100">
+                <option key={p.id} value={p.id} className="bg-white text-slate-900">
                   {p.name} ({p.sku}) — {p.dailyDemand} u/day
                 </option>
               ))}
@@ -103,37 +96,37 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
         
         {/* Left 3 Cols: Interactive Chart */}
-        <div className="lg:col-span-3 rounded-2xl border border-slate-800 bg-slate-900/80 p-6 shadow-xl backdrop-blur-md">
+        <div className="lg:col-span-3 rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
           
           {/* Chart Header & Controls */}
-          <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800/80">
+          <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-white">{currentProduct.name}</span>
-                <span className="rounded bg-indigo-500/20 px-2 py-0.5 text-[10px] font-mono text-indigo-300">
+                <span className="text-sm font-bold text-slate-900">{currentProduct.name}</span>
+                <span className="rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-mono text-emerald-800 border border-emerald-200">
                   {currentProduct.sku}
                 </span>
                 <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
                   isHighRisk 
-                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' 
-                    : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                    ? 'bg-rose-100 text-rose-700 border border-rose-200' 
+                    : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                 }`}>
                   Risk: {currentProduct.riskScore}/100
                 </span>
               </div>
-              <p className="mt-1 text-xs text-slate-400">
-                Last 30 Days Actuals (Solid White) vs Next {forecastHorizon} Days Holt's Forecast (Emerald) & Confidence Interval
+              <p className="mt-1 text-xs text-slate-500">
+                Last 30 Days Actuals (Solid Slate) vs Next {forecastHorizon} Days Holt's Forecast (Emerald) & Confidence Interval
               </p>
             </div>
 
             {/* Horizon Selector */}
-            <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-950 p-1">
+            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
               {[7, 14, 30].map((days) => (
                 <button
                   key={days}
                   onClick={() => setForecastHorizon(days)}
                   className={`rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
-                    forecastHorizon === days ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                    forecastHorizon === days ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   {days} Days Horizon
@@ -149,40 +142,40 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
                 <defs>
                   {/* Confidence Interval Gradient */}
                   <linearGradient id="confidenceBand" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
                     <stop offset="95%" stopColor="#10b981" stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                 <XAxis 
                   dataKey="date" 
-                  stroke="#64748b" 
+                  stroke="#94a3b8" 
                   fontSize={11} 
                   tickFormatter={(val) => {
                     const parts = val.split('-');
                     return `${parts[1]}/${parts[2]}`;
                   }}
                 />
-                <YAxis stroke="#64748b" fontSize={11} />
+                <YAxis stroke="#94a3b8" fontSize={11} />
                 
                 <Tooltip
                   content={({ active, payload, label }) => {
                     if (active && payload && payload.length) {
                       const data = payload[0].payload;
                       return (
-                        <div className="rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl backdrop-blur-md text-xs">
-                          <p className="font-semibold text-slate-200">{label}</p>
+                        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-lg text-xs text-slate-900">
+                          <p className="font-semibold text-slate-900">{label}</p>
                           {data.historicalSales !== undefined && (
-                            <p className="text-indigo-300 mt-1">
+                            <p className="text-slate-600 mt-1">
                               Actual Daily Sales: <strong>{data.historicalSales} units</strong>
                             </p>
                           )}
                           {data.forecast !== undefined && (
                             <div className="mt-1 space-y-0.5">
-                              <p className="text-emerald-400 font-semibold">
+                              <p className="text-emerald-700 font-semibold">
                                 Holt's Forecast: <strong>{data.forecast} units</strong>
                               </p>
-                              <p className="text-[10px] text-slate-400">
+                              <p className="text-[10px] text-slate-500">
                                 95% Confidence: [{data.lowerBound} – {data.upperBound}]
                               </p>
                             </div>
@@ -206,7 +199,7 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
                   y={currentProduct.dailyDemand} 
                   stroke="#f59e0b" 
                   strokeDasharray="4 4" 
-                  label={{ value: `Avg Demand (${currentProduct.dailyDemand})`, fill: '#f59e0b', fontSize: 10 }} 
+                  label={{ value: `Avg Demand (${currentProduct.dailyDemand})`, fill: '#d97706', fontSize: 10 }} 
                 />
 
                 {/* Confidence Interval Area */}
@@ -229,10 +222,10 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
                 <Line
                   type="monotone"
                   dataKey="historicalSales"
-                  stroke="#cbd5e1"
+                  stroke="#475569"
                   strokeWidth={2}
-                  dot={{ r: 2.5, fill: '#cbd5e1' }}
-                  activeDot={{ r: 5, fill: '#6366f1' }}
+                  dot={{ r: 2.5, fill: '#475569' }}
+                  activeDot={{ r: 5, fill: '#10b981' }}
                   name="Actual Historical Sales"
                   connectNulls={false}
                 />
@@ -241,10 +234,10 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
                 <Line
                   type="monotone"
                   dataKey="forecast"
-                  stroke="#10b981"
+                  stroke="#059669"
                   strokeWidth={2.5}
                   strokeDasharray="5 5"
-                  dot={{ r: 3.5, fill: '#10b981' }}
+                  dot={{ r: 3.5, fill: '#059669' }}
                   name="Holt's Linear Forecast"
                   connectNulls={false}
                 />
@@ -253,15 +246,15 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
           </div>
 
           {/* Quick Explanation Footer */}
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-2.5 text-xs text-slate-400">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-xs text-slate-600">
             <div className="flex items-center gap-2">
-              <Info className="h-4 w-4 text-indigo-400 flex-shrink-0" />
-              <span>Model automatically penalizes volatility & accounts for trend velocity ({currentProduct.demandTrend > 0 ? '+' : ''}{currentProduct.demandTrend}%).</span>
+              <Info className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+              <span>Model dynamically accounts for trend velocity ({currentProduct.demandTrend > 0 ? '+' : ''}{currentProduct.demandTrend}%).</span>
             </div>
             <div className="flex items-center gap-3">
-              <span>Forecast RMSE: <strong className="text-slate-200">±1.42 units</strong></span>
+              <span>Forecast RMSE: <strong className="text-slate-800">±1.42 units</strong></span>
               <span>•</span>
-              <span>Backtest Accuracy: <strong className="text-emerald-400">94.2%</strong></span>
+              <span>Backtest Accuracy: <strong className="text-emerald-700">94.2%</strong></span>
             </div>
           </div>
 
@@ -271,9 +264,9 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
         <div className="space-y-6">
           
           {/* Holt's Parameters Card */}
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-lg backdrop-blur-md">
-            <div className="flex items-center gap-2 text-xs font-bold text-white uppercase tracking-wider">
-              <Sliders className="h-4 w-4 text-indigo-400" />
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-900 uppercase tracking-wider">
+              <Sliders className="h-4 w-4 text-emerald-600" />
               Smoothing Parameters
             </div>
 
@@ -281,9 +274,9 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
               
               {/* Alpha Slider */}
               <div>
-                <div className="flex items-center justify-between text-slate-300">
+                <div className="flex items-center justify-between text-slate-700">
                   <span>Alpha (Level &alpha;):</span>
-                  <span className="font-mono font-bold text-indigo-400">{alpha.toFixed(2)}</span>
+                  <span className="font-mono font-bold text-emerald-700">{alpha.toFixed(2)}</span>
                 </div>
                 <input
                   type="range"
@@ -292,16 +285,16 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
                   step="0.05"
                   value={alpha}
                   onChange={(e) => setAlpha(parseFloat(e.target.value))}
-                  className="mt-2 w-full accent-indigo-500 cursor-pointer"
+                  className="mt-2 w-full accent-emerald-600 cursor-pointer"
                 />
                 <p className="mt-1 text-[10px] text-slate-500">Weight on recent sales vs historical baseline.</p>
               </div>
 
               {/* Beta Slider */}
               <div>
-                <div className="flex items-center justify-between text-slate-300">
+                <div className="flex items-center justify-between text-slate-700">
                   <span>Beta (Trend &beta;):</span>
-                  <span className="font-mono font-bold text-emerald-400">{beta.toFixed(2)}</span>
+                  <span className="font-mono font-bold text-emerald-700">{beta.toFixed(2)}</span>
                 </div>
                 <input
                   type="range"
@@ -310,14 +303,14 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
                   step="0.02"
                   value={beta}
                   onChange={(e) => setBeta(parseFloat(e.target.value))}
-                  className="mt-2 w-full accent-emerald-500 cursor-pointer"
+                  className="mt-2 w-full accent-emerald-600 cursor-pointer"
                 />
                 <p className="mt-1 text-[10px] text-slate-500">Responsiveness to growth acceleration / deceleration.</p>
               </div>
 
               <button
                 onClick={() => { setAlpha(0.35); setBeta(0.15); }}
-                className="w-full rounded-lg border border-slate-700 bg-slate-800/80 py-1.5 text-[11px] font-medium text-slate-300 transition-all hover:bg-slate-700 hover:text-white"
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 text-[11px] font-medium text-slate-700 transition-all hover:bg-slate-100 hover:text-slate-900 shadow-xs"
               >
                 Reset to Optimized Defaults
               </button>
@@ -326,52 +319,52 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
           </div>
 
           {/* SKU Intelligence Summary Card */}
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-lg backdrop-blur-md">
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider">Predictive Indicators</h3>
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
+            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Predictive Indicators</h3>
             
             <div className="mt-4 space-y-3 text-xs">
               
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                <span className="text-slate-400">Current On-Hand:</span>
-                <span className="font-bold text-white">{currentProduct.currentStock} units</span>
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <span className="text-slate-500">Current On-Hand:</span>
+                <span className="font-bold text-slate-900">{currentProduct.currentStock} units</span>
               </div>
 
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                <span className="text-slate-400">Daily Demand Run-Rate:</span>
-                <span className="font-bold text-emerald-400">{currentProduct.dailyDemand} units/day</span>
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <span className="text-slate-500">Daily Demand Run-Rate:</span>
+                <span className="font-bold text-emerald-700">{currentProduct.dailyDemand} units/day</span>
               </div>
 
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                <span className="text-slate-400">Days to Depletion:</span>
-                <span className={`font-bold ${Number(daysToStockout) <= currentProduct.leadTimeDays ? 'text-rose-400' : 'text-slate-200'}`}>
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <span className="text-slate-500">Days to Depletion:</span>
+                <span className={`font-bold ${Number(daysToStockout) <= currentProduct.leadTimeDays ? 'text-rose-600' : 'text-slate-900'}`}>
                   {daysToStockout} Days
                 </span>
               </div>
 
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                <span className="text-slate-400">Supplier Lead Time:</span>
-                <span className="font-semibold text-slate-300">{currentProduct.leadTimeDays} Days</span>
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <span className="text-slate-500">Supplier Lead Time:</span>
+                <span className="font-semibold text-slate-800">{currentProduct.leadTimeDays} Days</span>
               </div>
 
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                <span className="text-slate-400">Dynamic Safety Buffer:</span>
-                <span className="font-semibold text-slate-300">{currentProduct.safetyStock} units</span>
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <span className="text-slate-500">Dynamic Safety Buffer:</span>
+                <span className="font-semibold text-slate-800">{currentProduct.safetyStock} units</span>
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Calculated EOQ Batch:</span>
-                <span className="font-bold text-indigo-400">{currentProduct.eoq} units</span>
+                <span className="text-slate-500">Calculated EOQ Batch:</span>
+                <span className="font-bold text-emerald-700">{currentProduct.eoq} units</span>
               </div>
 
             </div>
 
             {isHighRisk && (
-              <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-950/20 p-3 text-xs text-rose-300">
+              <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
                 <div className="flex items-center gap-1.5 font-bold">
-                  <AlertCircle className="h-4 w-4 text-rose-400" />
+                  <AlertCircle className="h-4 w-4 text-rose-600" />
                   Urgent Reorder Required
                 </div>
-                <p className="mt-1 text-[11px] text-rose-400/90 leading-relaxed">
+                <p className="mt-1 text-[11px] text-rose-700 leading-relaxed">
                   Depletion date arrives prior to standard replenishment window.
                 </p>
               </div>

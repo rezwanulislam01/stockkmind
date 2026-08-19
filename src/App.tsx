@@ -11,8 +11,6 @@ import { ActionWhyModal } from './components/ActionWhyModal';
 import { RecordSaleModal } from './components/RecordSaleModal';
 import { AddProductModal } from './components/AddProductModal';
 import { AIMultiAssistant } from './components/AIMultiAssistant';
-import { AndroidMobileView } from './components/AndroidMobileView';
-import { AndroidCodeModal } from './components/AndroidCodeModal';
 import { useAuth } from './context/AuthContext';
 import { 
   initializeUserInventory, 
@@ -46,15 +44,12 @@ import {
   calculateEOQ,
   calculateSafetyStockAndROP
 } from './utils/forecasting';
-import { Sparkles, Plus, AlertCircle, ShoppingCart, TrendingUp, Cloud, ShieldCheck } from 'lucide-react';
 
 export default function App() {
   const { user } = useAuth();
 
-  // Navigation & View State
+  // Navigation State
   const [currentTab, setCurrentTab] = useState<ActiveTab>('dashboard');
-  const [viewMode, setViewMode] = useState<'desktop' | 'android'>('desktop');
-  const [isAndroidCodeOpen, setIsAndroidCodeOpen] = useState<boolean>(false);
 
   // Core Data State
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
@@ -134,44 +129,50 @@ export default function App() {
       setProducts(INITIAL_PRODUCTS);
       setActionQueue(INITIAL_ACTION_QUEUE);
     } else if (scenario === 'black_friday') {
-      // Spike daily demand by 60-90% for high velocity items
       const updated = INITIAL_PRODUCTS.map(p => {
         const spikeDemand = p.category === 'Groceries' || p.category === 'Electronics' 
           ? Math.round(p.dailyDemand * 1.8) 
-          : p.dailyDemand;
-        const newRisk = calculateRiskScore(p.currentStock, spikeDemand, p.leadTimeDays, p.safetyStock).riskScore;
+          : Math.round(p.dailyDemand * 1.4);
+        const { safetyStock, reorderPoint } = calculateSafetyStockAndROP(spikeDemand, p.leadTimeDays);
+        const { riskScore, status } = calculateRiskScore(p.currentStock, spikeDemand, p.leadTimeDays, safetyStock, p.demandTrend + 45, p.daysWithoutSale);
+
         return {
           ...p,
           dailyDemand: spikeDemand,
-          demandTrend: 75,
-          riskScore: newRisk,
-          status: calculateStockStatus(p.currentStock, spikeDemand, p.leadTimeDays, p.daysWithoutSale),
+          safetyStock,
+          reorderPoint,
+          riskScore,
+          status,
+          demandTrend: p.demandTrend + 45,
         };
       });
       setProducts(updated);
-    } else if (scenario === 'supply_shock' || scenario === 'port_strike') {
-      // Add +5 to +8 days lead time delay
+    } else if (scenario === 'supply_shock') {
       const updated = INITIAL_PRODUCTS.map(p => {
-        const delayedLead = p.leadTimeDays + 6;
-        const newRisk = calculateRiskScore(p.currentStock, p.dailyDemand, delayedLead, p.safetyStock).riskScore;
+        const delayedLead = p.leadTimeDays + 5;
+        const { safetyStock, reorderPoint } = calculateSafetyStockAndROP(p.dailyDemand, delayedLead);
+        const { riskScore, status } = calculateRiskScore(p.currentStock, p.dailyDemand, delayedLead, safetyStock, p.demandTrend, p.daysWithoutSale);
+
         return {
           ...p,
           leadTimeDays: delayedLead,
-          riskScore: newRisk,
-          status: calculateStockStatus(p.currentStock, p.dailyDemand, delayedLead, p.daysWithoutSale),
+          safetyStock,
+          reorderPoint,
+          riskScore,
+          status,
         };
       });
       setProducts(updated);
-    } else if (scenario === 'dead_stock_flush' || scenario === 'dead_stock_crisis') {
-      // Increase stagnant days on cosmetic / home goods
-      const updated = INITIAL_PRODUCTS.map((p, idx) => {
-        if (idx % 3 === 0) {
+    } else if (scenario === 'dead_stock_flush') {
+      const updated = INITIAL_PRODUCTS.map(p => {
+        if (p.status === 'dead_stock' || p.daysWithoutSale >= 25) {
           return {
             ...p,
-            daysWithoutSale: 45,
-            dailyDemand: 0,
-            status: 'dead_stock' as const,
-            riskScore: 60,
+            unitPrice: Math.round(p.unitPrice * 0.75),
+            dailyDemand: 4.5,
+            daysWithoutSale: 0,
+            status: 'warning' as const,
+            riskScore: 40,
           };
         }
         return p;
@@ -180,358 +181,303 @@ export default function App() {
     }
   };
 
-  // Handle Approve Action in AI Action Center
+  // Human-In-The-Loop Action Approval
   const handleApproveAction = (action: AIActionItem) => {
-    // 1. Mark action as approved
-    const updatedAction = { ...action, status: 'approved' as const };
-    setActionQueue(prev =>
-      prev.map(a => (a.id === action.id ? updatedAction : a))
-    );
+    const updatedQueue = actionQueue.map(a => {
+      if (a.id === action.id) {
+        return { ...a, status: 'approved' as const };
+      }
+      return a;
+    });
+    setActionQueue(updatedQueue);
 
     if (user) {
-      updateActionInFirestore(user.uid, updatedAction);
+      updateActionInFirestore(user.uid, { ...action, status: 'approved' });
     }
 
-    // 2. If it's a reorder action, generate a PO automatically
-    if (action.actionType === 'approve_reorder' && action.recommendedQuantity) {
-      const matchingProduct = products.find(p => p.id === action.productId);
-      const supplier = suppliers[0];
+    if (action.actionType === 'approve_reorder') {
+      const product = products.find(p => p.sku === action.productSku);
+      if (product) {
+        const sup = suppliers.find(s => s.id === product.preferredSupplierId) || suppliers[0];
+        const poNumber = `PO-${Math.floor(100000 + Math.random() * 900000)}`;
+        const reorderQty = product.eoq || 100;
+        const unitCost = Math.round(product.costPrice * sup.unitCostMarkup);
 
-      if (matchingProduct && supplier) {
         const newPO: PurchaseOrder = {
-          id: 'po-' + Date.now(),
-          poNumber: 'PO-' + Math.floor(10000 + Math.random() * 90000),
-          productId: matchingProduct.id,
-          productName: matchingProduct.name,
-          productSku: matchingProduct.sku,
-          supplierId: supplier.id,
-          supplierName: supplier.name,
-          quantity: action.recommendedQuantity,
-          unitCost: matchingProduct.costPrice,
-          totalCost: matchingProduct.costPrice * action.recommendedQuantity,
-          status: 'in_transit',
+          id: `po-${Date.now()}`,
+          poNumber,
+          productId: product.id,
+          productName: product.name,
+          productSku: product.sku,
+          supplierId: sup.id,
+          supplierName: sup.name,
+          quantity: reorderQty,
+          unitCost,
+          totalCost: reorderQty * unitCost,
+          status: 'submitted',
           createdAt: new Date().toISOString().split('T')[0],
-          expectedDeliveryDate: new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0],
-          aiRecommendationReason: `Auto-generated from AI Action Center approval (${action.title})`,
+          expectedDeliveryDate: new Date(Date.now() + sup.baseLeadTime * 86400000).toISOString().split('T')[0],
+          userId: user?.uid,
         };
-        setPurchaseOrders(prev => [newPO, ...prev]);
+
+        const updatedPOs = [newPO, ...purchaseOrders];
+        setPurchaseOrders(updatedPOs);
 
         if (user) {
           savePurchaseOrderToFirestore(user.uid, newPO);
         }
+
+        const updatedProducts = products.map(p => {
+          if (p.id === product.id) {
+            return {
+              ...p,
+              riskScore: Math.max(10, p.riskScore - 40),
+              status: 'healthy' as const,
+            };
+          }
+          return p;
+        });
+        setProducts(updatedProducts);
       }
     }
   };
 
-  // Handle Create Purchase Order from Supplier Matrix
-  const handleCreatePurchaseOrder = (newPOData: Omit<PurchaseOrder, 'id' | 'poNumber' | 'createdAt'>) => {
-    const newPO: PurchaseOrder = {
-      ...newPOData,
-      id: 'po-' + Date.now(),
-      poNumber: 'PO-' + Math.floor(10000 + Math.random() * 90000),
-      createdAt: new Date().toISOString().split('T')[0],
+  // Record Sale & Decrement Stock
+  const handleRecordSale = (productId: string, quantity: number) => {
+    const updated = products.map(p => {
+      if (p.id === productId) {
+        const newStock = Math.max(0, p.currentStock - quantity);
+        const { riskScore, status } = calculateRiskScore(newStock, p.dailyDemand, p.leadTimeDays, p.safetyStock, p.demandTrend, 0);
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        const historyCopy = [...p.salesHistory];
+        const lastEntry = historyCopy[historyCopy.length - 1];
+
+        if (lastEntry && lastEntry.date === todayStr) {
+          lastEntry.sales += quantity;
+        } else {
+          historyCopy.push({ date: todayStr, sales: quantity });
+        }
+
+        const updatedProduct: Product = {
+          ...p,
+          currentStock: newStock,
+          daysWithoutSale: 0,
+          riskScore,
+          status,
+          salesHistory: historyCopy,
+        };
+
+        if (user) {
+          saveProductToFirestore(user.uid, updatedProduct);
+        }
+
+        return updatedProduct;
+      }
+      return p;
+    });
+
+    setProducts(updated);
+  };
+
+  // Add SKU to Catalog
+  const handleAddProduct = (newProductData: Omit<Product, 'id' | 'salesHistory' | 'reorderPoint' | 'eoq' | 'riskScore' | 'status'>) => {
+    const id = `prod-${Date.now()}`;
+    const { safetyStock, reorderPoint } = calculateSafetyStockAndROP(newProductData.dailyDemand, newProductData.leadTimeDays);
+    const eoq = calculateEOQ(newProductData.dailyDemand, newProductData.costPrice, 0.20, 1200);
+    const { riskScore, status } = calculateRiskScore(
+      newProductData.currentStock, 
+      newProductData.dailyDemand, 
+      newProductData.leadTimeDays, 
+      safetyStock, 
+      newProductData.demandTrend || 0, 
+      newProductData.daysWithoutSale || 0
+    );
+
+    const history = Array.from({ length: 30 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (29 - i));
+      return {
+        date: d.toISOString().split('T')[0],
+        sales: Math.max(1, Math.round(newProductData.dailyDemand * (0.8 + Math.random() * 0.4))),
+      };
+    });
+
+    const newProduct: Product = {
+      ...newProductData,
+      id,
+      safetyStock,
+      reorderPoint,
+      eoq,
+      riskScore,
+      status,
+      salesHistory: history,
+      userId: user?.uid,
     };
-    setPurchaseOrders(prev => [newPO, ...prev]);
+
+    const updated = [newProduct, ...products];
+    setProducts(updated);
+    setSelectedProduct(newProduct);
+
+    if (user) {
+      saveProductToFirestore(user.uid, newProduct);
+    }
+  };
+
+  // Create Purchase Order
+  const handleCreatePO = (poData: Omit<PurchaseOrder, 'id' | 'poNumber' | 'createdAt'>) => {
+    const newPO: PurchaseOrder = {
+      ...poData,
+      id: `po-${Date.now()}`,
+      poNumber: `PO-${Math.floor(100000 + Math.random() * 900000)}`,
+      createdAt: new Date().toISOString().split('T')[0],
+      userId: user?.uid,
+    };
+
+    const updated = [newPO, ...purchaseOrders];
+    setPurchaseOrders(updated);
 
     if (user) {
       savePurchaseOrderToFirestore(user.uid, newPO);
     }
   };
 
-  // Handle Receive PO & Restock
+  // Receive Purchase Order
   const handleReceivePO = (poId: string) => {
-    const targetPO = purchaseOrders.find(p => p.id === poId);
+    const targetPO = purchaseOrders.find(po => po.id === poId);
     if (!targetPO) return;
 
-    // 1. Update PO Status
-    const updatedPO = { ...targetPO, status: 'delivered' as const };
-    setPurchaseOrders(prev =>
-      prev.map(p => (p.id === poId ? updatedPO : p))
-    );
+    const updatedPOs = purchaseOrders.map(po => {
+      if (po.id === poId) {
+        return { ...po, status: 'delivered' as const };
+      }
+      return po;
+    });
+    setPurchaseOrders(updatedPOs);
 
-    if (user) {
-      savePurchaseOrderToFirestore(user.uid, updatedPO);
-    }
+    const updatedProducts = products.map(p => {
+      if (p.id === targetPO.productId) {
+        const newStock = p.currentStock + targetPO.quantity;
+        const { riskScore, status } = calculateRiskScore(newStock, p.dailyDemand, p.leadTimeDays, p.safetyStock, p.demandTrend, 0);
 
-    // 2. Add Stock to Product & Recalculate Risk
-    setProducts(prev =>
-      prev.map(prod => {
-        if (prod.id === targetPO.productId) {
-          const updatedStock = prod.currentStock + targetPO.quantity;
-          const newRisk = calculateRiskScore(updatedStock, prod.dailyDemand, prod.leadTimeDays, prod.safetyStock).riskScore;
-          const newStatus = calculateStockStatus(updatedStock, prod.dailyDemand, prod.leadTimeDays, prod.daysWithoutSale);
-          const updatedProduct: Product = {
-            ...prod,
-            currentStock: updatedStock,
-            riskScore: newRisk,
-            status: newStatus,
-          };
-          if (user) {
-            saveProductToFirestore(user.uid, updatedProduct);
-          }
-          return updatedProduct;
+        const prodUpdated = {
+          ...p,
+          currentStock: newStock,
+          daysWithoutSale: 0,
+          riskScore,
+          status,
+          lastRestocked: new Date().toISOString().split('T')[0],
+        };
+
+        if (user) {
+          saveProductToFirestore(user.uid, prodUpdated);
         }
-        return prod;
-      })
-    );
-  };
 
-  // Handle Record Customer Sale
-  const handleRecordSale = (productId: string, quantitySold: number) => {
-    setProducts(prev =>
-      prev.map(prod => {
-        if (prod.id === productId) {
-          const updatedStock = Math.max(0, prod.currentStock - quantitySold);
-          const newRisk = calculateRiskScore(updatedStock, prod.dailyDemand, prod.leadTimeDays, prod.safetyStock).riskScore;
-          const newStatus = calculateStockStatus(updatedStock, prod.dailyDemand, prod.leadTimeDays, 0);
-          
-          // Append sale to history
-          const updatedHistory = [
-            ...prod.salesHistory.slice(1),
-            {
-              date: new Date().toISOString().split('T')[0],
-              sales: quantitySold,
-              forecast: prod.dailyDemand,
-            },
-          ];
-
-          const updatedProduct: Product = {
-            ...prod,
-            currentStock: updatedStock,
-            salesHistory: updatedHistory,
-            daysWithoutSale: 0,
-            riskScore: newRisk,
-            status: newStatus,
-          };
-
-          if (user) {
-            saveProductToFirestore(user.uid, updatedProduct);
-          }
-
-          return updatedProduct;
-        }
-        return prod;
-      })
-    );
-  };
-
-  // Handle Add New Product SKU
-  const handleAddProduct = (newProdData: Omit<Product, 'id' | 'riskScore' | 'status' | 'salesHistory' | 'eoq' | 'safetyStock' | 'reorderPoint'>) => {
-    const { safetyStock, reorderPoint } = calculateSafetyStockAndROP(newProdData.dailyDemand, newProdData.leadTimeDays);
-    const eoq = calculateEOQ(newProdData.dailyDemand * 365, 25, newProdData.costPrice, 0.2);
-    const risk = calculateRiskScore(newProdData.currentStock, newProdData.dailyDemand, newProdData.leadTimeDays, safetyStock).riskScore;
-    const status = calculateStockStatus(newProdData.currentStock, newProdData.dailyDemand, newProdData.leadTimeDays, 0);
-
-    // Initial sales history
-    const history = Array.from({ length: 30 }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - (29 - i));
-      return {
-        date: d.toISOString().split('T')[0],
-        sales: Math.max(0, Math.round(newProdData.dailyDemand + (Math.random() * 4 - 2))),
-        forecast: Math.round(newProdData.dailyDemand),
-      };
+        return prodUpdated;
+      }
+      return p;
     });
 
-    const newProd: Product = {
-      ...newProdData,
-      id: 'prod-' + Date.now(),
-      safetyStock,
-      reorderPoint,
-      eoq,
-      riskScore: risk,
-      status,
-      salesHistory: history,
-    };
-
-    setProducts(prev => [newProd, ...prev]);
-    setSelectedProduct(newProd);
-
-    if (user) {
-      saveProductToFirestore(user.uid, newProd);
-    }
+    setProducts(updatedProducts);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f19] text-slate-900 dark:text-slate-100 antialiased selection:bg-indigo-500 selection:text-white transition-colors duration-200">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans antialiased">
       
-      {/* Navigation Header */}
+      {/* Primary White Navigation Header */}
       <Navbar
         activeTab={currentTab}
         setActiveTab={setCurrentTab}
         healthScore={healthScore}
-        tokensSavedPercentage={68}
+        tokensSavedPercentage={94}
         tokensSavedTotal={14200}
         onOpenRecordSale={() => setIsRecordSaleOpen(true)}
         onOpenAddProduct={() => setIsAddProductOpen(true)}
-        onToggleChat={() => setIsAIAssistantOpen(prev => !prev)}
+        onToggleChat={() => setIsAIAssistantOpen(!isAIAssistantOpen)}
         isChatOpen={isAIAssistantOpen}
         onSelectDemoScenario={handleSelectScenario}
         currentDemoScenario={activeDemoScenario}
-        viewMode={viewMode}
-        onToggleViewMode={() => setViewMode(prev => prev === 'android' ? 'desktop' : 'android')}
-        onOpenAndroidCode={() => setIsAndroidCodeOpen(true)}
       />
 
-      {/* Main Container */}
-      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-6 pb-12">
-        
-        {viewMode === 'android' ? (
-          <div className="py-4 flex flex-col items-center justify-center space-y-4">
-            <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-              <span>📱 Android Pixel 9 Pro Material 3 Simulation</span>
-              <span>•</span>
-              <button 
-                onClick={() => setIsAndroidCodeOpen(true)}
-                className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline"
-              >
-                Inspect Jetpack Compose Kotlin Code
-              </button>
-            </div>
-            
-            <AndroidMobileView
-              products={products}
-              suppliers={suppliers}
-              actionQueue={actionQueue}
-              purchaseOrders={purchaseOrders}
-              healthScore={healthScore}
-              totalValuation={totalValuation}
-              deadCapital={deadCapital}
-              criticalCount={criticalCount}
-              attentionCount={attentionCount}
-              avoidedLoss={avoidedLoss}
-              activeScenario={activeDemoScenario}
-              onSelectProduct={prod => {
-                setSelectedProduct(prod);
-                setDrilldownProduct(prod);
-              }}
-              onApproveAction={handleApproveAction}
-              onOpenWhyModal={setActionWhyItem}
-              onOpenRecordSale={() => setIsRecordSaleOpen(true)}
-              onOpenAddProduct={() => setIsAddProductOpen(true)}
-              onOpenAIAssistant={() => setIsAIAssistantOpen(true)}
-              onCreatePO={handleCreatePurchaseOrder}
-              onSelectScenario={handleSelectScenario}
-            />
-          </div>
-        ) : (
-          <>
-            {/* Quick Operational Floating / Top Bar */}
-            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 dark:border-slate-800/80 bg-white/80 dark:bg-slate-900/60 px-5 py-3 backdrop-blur-md shadow-sm">
-              <div className="flex items-center gap-3 text-xs">
-                <span className="flex items-center gap-1.5 font-semibold text-emerald-600 dark:text-emerald-400">
-                  <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  StockMind Decision Engine: Active
-                </span>
-                <span className="hidden sm:inline text-slate-300 dark:text-slate-700">|</span>
-                <span className="hidden sm:inline text-slate-600 dark:text-slate-400">
-                  Scenario: <strong className="text-slate-800 dark:text-slate-200 capitalize">{activeDemoScenario.replace('_', ' ')}</strong>
-                </span>
-                {user && (
-                  <>
-                    <span className="hidden md:inline text-slate-300 dark:text-slate-700">|</span>
-                    <span className="hidden md:flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-                      <Cloud className="h-3.5 w-3.5" />
-                      Firestore Synced
-                    </span>
-                  </>
-                )}
-              </div>
+      {/* Main Workspace Body */}
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 space-y-6">
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setIsRecordSaleOpen(true)}
-                  className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-all shadow-sm"
-                >
-                  <TrendingUp className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
-                  Record Sale
-                </button>
+        {currentTab === 'dashboard' && (
+          <ExecutiveDashboard
+            products={products}
+            healthScore={healthScore}
+            healthDelta={4.2}
+            totalValuation={totalValuation}
+            deadCapital={deadCapital}
+            criticalCount={criticalCount}
+            attentionCount={attentionCount}
+            avoidedLoss={avoidedLoss}
+            actionQueue={actionQueue}
+            onApproveAction={handleApproveAction}
+            onOpenWhyModal={action => setActionWhyItem(action)}
+            onSelectProduct={prod => {
+              setSelectedProduct(prod);
+              setDrilldownProduct(prod);
+            }}
+            onNavigateTab={setCurrentTab}
+          />
+        )}
 
-                <button
-                  onClick={() => setIsAddProductOpen(true)}
-                  className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-500 shadow-sm shadow-indigo-600/30 transition-all"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add SKU
-                </button>
-              </div>
-            </div>
+        {currentTab === 'forecasting' && (
+          <DemandForecastingView
+            products={products}
+            selectedProduct={selectedProduct}
+            onSelectProduct={setSelectedProduct}
+            onOpenReorderModal={prod => {
+              setSelectedProduct(prod);
+              setCurrentTab('suppliers');
+            }}
+          />
+        )}
 
-            {/* Tab View Router */}
-            {currentTab === 'dashboard' && (
-              <ExecutiveDashboard
-                products={products}
-                healthScore={healthScore}
-                healthDelta={4.2}
-                totalValuation={totalValuation}
-                deadCapital={deadCapital}
-                criticalCount={criticalCount}
-                attentionCount={attentionCount}
-                avoidedLoss={avoidedLoss}
-                actionQueue={actionQueue}
-                onApproveAction={handleApproveAction}
-                onOpenWhyModal={setActionWhyItem}
-                onSelectProduct={prod => {
-                  setSelectedProduct(prod);
-                  setDrilldownProduct(prod);
-                }}
-                onNavigateTab={setCurrentTab}
-              />
-            )}
+        {currentTab === 'suppliers' && (
+          <SupplierMatrixView
+            products={products}
+            suppliers={suppliers}
+            selectedProduct={selectedProduct}
+            onSelectProduct={setSelectedProduct}
+            onCreatePO={handleCreatePO}
+            onNavigateToOrders={() => setCurrentTab('orders')}
+          />
+        )}
 
-            {currentTab === 'forecasting' && (
-              <DemandForecastingView
-                products={products}
-                selectedProduct={selectedProduct}
-                onSelectProduct={setSelectedProduct}
-                onOpenOrderModal={() => setCurrentTab('suppliers')}
-              />
-            )}
+        {currentTab === 'simulator' && (
+          <ScenarioSimulator
+            products={products}
+            selectedProduct={selectedProduct}
+            onSelectProduct={setSelectedProduct}
+          />
+        )}
 
-            {currentTab === 'suppliers' && (
-              <SupplierMatrixView
-                products={products}
-                suppliers={suppliers}
-                selectedProduct={selectedProduct}
-                onSelectProduct={setSelectedProduct}
-                onCreatePurchaseOrder={handleCreatePurchaseOrder}
-              />
-            )}
+        {currentTab === 'catalog' && (
+          <ProductCatalogTable
+            products={products}
+            onSelectProduct={prod => {
+              setSelectedProduct(prod);
+              setDrilldownProduct(prod);
+            }}
+            onOpenRecordSale={prod => {
+              setSelectedProduct(prod);
+              setIsRecordSaleOpen(true);
+            }}
+            onOpenReorder={prod => {
+              setSelectedProduct(prod);
+              setCurrentTab('suppliers');
+            }}
+          />
+        )}
 
-            {currentTab === 'simulator' && (
-              <ScenarioSimulator
-                products={products}
-                selectedProduct={selectedProduct}
-                onSelectProduct={setSelectedProduct}
-              />
-            )}
-
-            {currentTab === 'catalog' && (
-              <ProductCatalogTable
-                products={products}
-                onSelectProduct={prod => {
-                  setSelectedProduct(prod);
-                  setDrilldownProduct(prod);
-                }}
-                onOpenRecordSale={prod => {
-                  setSelectedProduct(prod);
-                  setIsRecordSaleOpen(true);
-                }}
-                onOpenReorder={prod => {
-                  setSelectedProduct(prod);
-                  setCurrentTab('suppliers');
-                }}
-              />
-            )}
-
-            {currentTab === 'orders' && (
-              <PurchaseOrdersView
-                purchaseOrders={purchaseOrders}
-                onReceivePO={handleReceivePO}
-                onNavigateTab={setCurrentTab}
-              />
-            )}
-          </>
+        {currentTab === 'orders' && (
+          <PurchaseOrdersView
+            purchaseOrders={purchaseOrders}
+            onReceivePO={handleReceivePO}
+            onNavigateTab={setCurrentTab}
+          />
         )}
 
       </main>
@@ -587,7 +533,7 @@ export default function App() {
         />
       )}
 
-      {/* AI Multi-Assistant Slide-Over Drawer with High Thinking mode */}
+      {/* AI Multi-Assistant Slide-Over Drawer */}
       <AIMultiAssistant
         isOpen={isAIAssistantOpen}
         onClose={() => setIsAIAssistantOpen(false)}
@@ -598,12 +544,6 @@ export default function App() {
           setDrilldownProduct(prod);
         }}
         onNavigateTab={setCurrentTab}
-      />
-
-      {/* Android Jetpack Compose Native Code Modal */}
-      <AndroidCodeModal
-        isOpen={isAndroidCodeOpen}
-        onClose={() => setIsAndroidCodeOpen(false)}
       />
 
     </div>

@@ -20,8 +20,8 @@ export interface Product {
   currentStock: number;
   safetyStock: number;
   dailyDemand: number;
-  unitPrice: number; // Retail selling price
-  costPrice: number; // Wholesale unit cost
+  unitPrice: number; // Retail selling price in BDT (৳)
+  costPrice: number; // Wholesale unit cost in BDT (৳)
   leadTimeDays: number;
   reorderPoint: number;
   eoq: number;
@@ -29,11 +29,17 @@ export interface Product {
   daysWithoutSale: number; // consecutive days with 0 sales
   riskScore: number; // 0 - 100
   status: StockStatus;
-  holdingCostAnnual: number; // e.g. 0.18 (18%)
-  supplierIds: string[];
-  preferredSupplierId: string;
+  holdingCostPerYear?: number;
+  orderSetupCost?: number;
+  holdingCostAnnual?: number; // e.g. 0.18 (18%)
+  confidenceBoundLower?: number;
+  confidenceBoundUpper?: number;
+  supplierIds?: string[];
+  preferredSupplierId?: string;
   salesHistory: DailySales[];
-  lastRestocked: string;
+  notes?: string;
+  lastRestocked?: string;
+  userId?: string;
 }
 
 export interface Supplier {
@@ -56,37 +62,58 @@ export interface PurchaseOrder {
   poNumber: string;
   productId: string;
   productName: string;
-  productSku: string;
+  productSku?: string;
+  sku?: string;
   supplierId: string;
   supplierName: string;
   quantity: number;
-  unitCost: number;
+  unitCost?: number;
+  unitPrice?: number;
   totalCost: number;
   status: POStatus;
   createdAt: string;
-  expectedDeliveryDate: string;
+  orderDate?: string;
+  expectedDelivery?: string;
+  expectedDeliveryDate?: string;
+  isExpedited?: boolean;
+  shippingCost?: number;
   aiRecommendationReason?: string;
+  userId?: string;
 }
 
 export type ActionSeverity = 'urgent' | 'attention' | 'optimize';
-export type ActionType = 'approve_reorder' | 'adjust_safety_stock' | 'launch_clearance' | 'supplier_switch';
+export type ActionType = 'approve_reorder' | 'reorder' | 'adjust_safety_stock' | 'adjust_buffer' | 'launch_clearance' | 'liquidate' | 'supplier_switch';
 
 export interface AIActionItem {
   id: string;
+  userId?: string;
   severity: ActionSeverity;
   productId: string;
   productName: string;
-  productSku: string;
+  productSku?: string;
+  sku?: string;
+  category?: string;
   title: string;
-  description: string;
+  description?: string;
+  reasoning?: string;
   actionType: ActionType;
   recommendedQuantity?: number;
+  suggestedQuantity?: number;
   recommendedSafetyStock?: number;
+  suggestedSupplierId?: string;
   discountPercent?: number;
-  avoidedLossEstimate: number;
-  riskScore: number;
+  avoidedLossEstimate: number; // in BDT (৳)
+  riskScore?: number;
+  confidenceScore?: number;
   status: 'pending' | 'approved' | 'dismissed';
-  whyData: {
+  createdAt?: string;
+  metrics?: {
+    daysToStockout?: number;
+    holdingCostReduction?: number;
+    leadTimeVariance?: number;
+    supplierReliability?: number;
+  };
+  whyData?: {
     summary: string;
     rootCauses: string[];
     financialImpact: string;
@@ -142,6 +169,6 @@ export interface InventoryMetrics {
   deadCapital: number;
   criticalStockouts: number;
   attentionItems: number;
-  forecastAccuracy: number; // Percentage, e.g. 94.2%
+  forecastAccuracy: number;
   avoidedStockoutLoss: number;
 }

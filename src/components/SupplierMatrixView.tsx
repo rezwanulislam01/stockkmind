@@ -1,21 +1,14 @@
 import React, { useState } from 'react';
 import { 
   ShoppingCart, 
-  ShieldCheck, 
-  Clock, 
-  DollarSign, 
-  Star, 
   CheckCircle2, 
-  AlertTriangle, 
   Sparkles, 
-  ArrowRight, 
   ChevronDown,
   Building,
-  Truck,
   Plus
 } from 'lucide-react';
 import { Product, PurchaseOrder, Supplier } from '../types';
-import { calculateEOQ, calculateSafetyStockAndROP } from '../utils/forecasting';
+import { formatBDT } from '../utils/forecasting';
 import confetti from 'canvas-confetti';
 
 interface SupplierMatrixViewProps {
@@ -23,7 +16,8 @@ interface SupplierMatrixViewProps {
   suppliers: Supplier[];
   selectedProduct: Product | null;
   onSelectProduct: (product: Product) => void;
-  onCreatePurchaseOrder: (po: Omit<PurchaseOrder, 'id' | 'poNumber' | 'createdAt'>) => void;
+  onCreatePO: (po: Omit<PurchaseOrder, 'id' | 'poNumber' | 'createdAt'>) => void;
+  onNavigateToOrders?: () => void;
 }
 
 export const SupplierMatrixView: React.FC<SupplierMatrixViewProps> = ({
@@ -31,57 +25,50 @@ export const SupplierMatrixView: React.FC<SupplierMatrixViewProps> = ({
   suppliers,
   selectedProduct,
   onSelectProduct,
-  onCreatePurchaseOrder,
+  onCreatePO,
 }) => {
   const currentProduct = selectedProduct || products[0] || null;
   const [customQty, setCustomQty] = useState<number | null>(null);
-  const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
   const [isExpedited, setIsExpedited] = useState<boolean>(false);
   const [poSuccessMessage, setPoSuccessMessage] = useState<string | null>(null);
 
   if (!currentProduct) {
-    return <div className="p-8 text-center text-slate-400">No product selected for supplier evaluation.</div>;
+    return <div className="p-8 text-center text-slate-500">No product selected for supplier evaluation.</div>;
   }
 
   // Multi-suppliers for this SKU
-  const availableSuppliers = suppliers.filter(s => currentProduct.supplierIds.includes(s.id));
+  const availableSuppliers = suppliers.length > 0 ? suppliers : [];
   const activeOrderQty = customQty !== null ? customQty : currentProduct.eoq;
   const daysToStockout = Number((currentProduct.currentStock / Math.max(0.1, currentProduct.dailyDemand)).toFixed(1));
   const isCriticalStockout = currentProduct.riskScore >= 75 || daysToStockout <= currentProduct.leadTimeDays;
 
   // Determine AI recommended supplier
-  // If critical stockout, prioritize shortest lead time (SwiftLogistics / expedited)
-  // Else prioritize best reliability and lower cost
   let recommendedSupplier = availableSuppliers[0];
   let aiReason = "";
 
   if (isCriticalStockout) {
-    // Find fastest supplier
     const fastest = [...availableSuppliers].sort((a, b) => a.expeditedLeadTime - b.expeditedLeadTime)[0];
     if (fastest) {
       recommendedSupplier = fastest;
-      aiReason = `${fastest.name} is recommended over others despite a small price premium because current stockout risk is critical (${daysToStockout} days remaining vs ${fastest.expeditedLeadTime}d expedited transit), preventing an active stockout gap.`;
+      aiReason = `${fastest.name} in ${fastest.location} is recommended because current inventory runway is critical (${daysToStockout} days remaining vs ${fastest.expeditedLeadTime}d expedited transit), preventing an active stockout gap.`;
     }
   } else {
-    // Standard cost & reliability optimization
     const optimal = [...availableSuppliers].sort((a, b) => (b.reliability - a.unitCostMarkup * 10) - (a.reliability - b.unitCostMarkup * 10))[0];
     if (optimal) {
       recommendedSupplier = optimal;
-      aiReason = `${optimal.name} is recommended for optimal balance of 98%+ delivery reliability and competitive wholesale unit pricing.`;
+      aiReason = `${optimal.name} is recommended for highest delivery reliability (98%+) and competitive wholesale BDT pricing across Dhaka & regional depots.`;
     }
   }
 
-  const effectiveSelectedSupplier = availableSuppliers.find(s => s.id === (selectedSupplierId || recommendedSupplier?.id)) || recommendedSupplier;
-
-  const handleCreatePO = (supplier: Supplier, qty: number) => {
-    const unitCost = Number((currentProduct.costPrice * (isExpedited ? supplier.unitCostMarkup * 1.05 : supplier.unitCostMarkup)).toFixed(2));
-    const totalCost = Number((unitCost * qty).toFixed(2));
+  const handleCreatePurchaseOrder = (supplier: Supplier, qty: number) => {
+    const unitCost = Math.round(currentProduct.costPrice * (isExpedited ? supplier.unitCostMarkup * 1.05 : supplier.unitCostMarkup));
+    const totalCost = unitCost * qty;
     const transitDays = isExpedited ? supplier.expeditedLeadTime : supplier.baseLeadTime;
     
     const deliveryDate = new Date();
     deliveryDate.setDate(deliveryDate.getDate() + transitDays);
 
-    onCreatePurchaseOrder({
+    onCreatePO({
       productId: currentProduct.id,
       productName: currentProduct.name,
       productSku: currentProduct.sku,
@@ -92,41 +79,38 @@ export const SupplierMatrixView: React.FC<SupplierMatrixViewProps> = ({
       totalCost,
       status: 'submitted',
       expectedDeliveryDate: deliveryDate.toISOString().split('T')[0],
-      aiRecommendationReason: aiReason,
     });
 
     try {
       confetti({
-        particleCount: 50,
-        spread: 60,
+        particleCount: 40,
+        spread: 50,
         origin: { y: 0.8 },
       });
     } catch (e) {}
 
-    setPoSuccessMessage(`Purchase Order for ${qty} units of ${currentProduct.name} generated successfully!`);
+    setPoSuccessMessage(`Purchase Order for ${qty} units of ${currentProduct.name} generated (${formatBDT(totalCost)})!`);
     setTimeout(() => setPoSuccessMessage(null), 5000);
   };
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-4 pb-12">
       
       {/* Header & Product Switcher */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-lg backdrop-blur-md">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
         <div>
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-400">
-              <ShoppingCart className="h-4 w-4" />
-            </div>
-            <h2 className="text-base font-bold text-white tracking-tight">Smart Reorder & Multi-Supplier Decision Matrix</h2>
+            <ShoppingCart className="h-4 w-4 text-emerald-600" />
+            <h2 className="text-base font-bold text-slate-900 tracking-tight">Bangladesh Supplier Matrix & Smart Reorder (EOQ)</h2>
           </div>
-          <p className="mt-1 text-xs text-slate-400">
-            Automated Economic Order Quantity (EOQ), dynamic buffer calculations, and multi-vendor trade-off optimization.
+          <p className="text-xs text-slate-500">
+            Compare wholesale distributors across Dhaka, Narayanganj & Chattogram for optimal batch replenishment.
           </p>
         </div>
 
         {/* SKU Selector */}
-        <div className="flex items-center gap-3">
-          <label className="text-xs font-medium text-slate-400">Evaluate SKU:</label>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium text-slate-500">SKU:</label>
           <div className="relative">
             <select
               value={currentProduct.id}
@@ -134,244 +118,187 @@ export const SupplierMatrixView: React.FC<SupplierMatrixViewProps> = ({
                 const found = products.find(p => p.id === e.target.value);
                 if (found) onSelectProduct(found);
               }}
-              className="appearance-none rounded-xl border border-slate-700 bg-slate-800/90 py-2 pl-3 pr-9 text-xs font-semibold text-white transition-all hover:bg-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+              className="appearance-none rounded-lg border border-slate-300 bg-white py-1.5 pl-3 pr-8 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer shadow-xs"
             >
               {products.map((p) => (
-                <option key={p.id} value={p.id} className="bg-slate-900 text-slate-100">
+                <option key={p.id} value={p.id} className="bg-white text-slate-900">
                   {p.name} ({p.sku})
                 </option>
               ))}
             </select>
-            <ChevronDown className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-slate-400" />
+            <ChevronDown className="pointer-events-none absolute right-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
           </div>
         </div>
       </div>
 
       {poSuccessMessage && (
-        <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/40 p-4 text-xs font-semibold text-emerald-300 animate-fadeIn">
-          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800">
+          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
           <span>{poSuccessMessage}</span>
         </div>
       )}
 
-      {/* Reorder Diagnostics Banner */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        
-        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-          <span className="text-xs text-slate-400">Current Stock / Safety Level</span>
-          <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-white">{currentProduct.currentStock}</span>
-            <span className="text-xs text-slate-400">/ {currentProduct.safetyStock} buffer</span>
+      {/* Quick Diagnostics */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
+          <span className="text-xs text-slate-500">Current Stock</span>
+          <div className="mt-1 flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold text-slate-900">{currentProduct.currentStock}</span>
+            <span className="text-xs text-slate-500">units (Buffer: {currentProduct.safetyStock})</span>
           </div>
-          <p className="mt-1 text-[11px] text-slate-500">Run-rate: {currentProduct.dailyDemand} units/day</p>
         </div>
 
-        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-          <span className="text-xs text-slate-400">Calculated EOQ Batch</span>
-          <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-indigo-400">{currentProduct.eoq}</span>
-            <span className="text-xs text-slate-400">units</span>
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
+          <span className="text-xs text-slate-500">Economic Order Qty (EOQ)</span>
+          <div className="mt-1 flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold text-emerald-700">{currentProduct.eoq}</span>
+            <span className="text-xs text-slate-500">units batch</span>
           </div>
-          <p className="mt-1 text-[11px] text-slate-500">Minimizes setup + annual holding cost</p>
         </div>
 
-        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-          <span className="text-xs text-slate-400">Reorder Point (ROP)</span>
-          <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-emerald-400">{currentProduct.reorderPoint}</span>
-            <span className="text-xs text-slate-400">units threshold</span>
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
+          <span className="text-xs text-slate-500">Reorder Threshold (ROP)</span>
+          <div className="mt-1 flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold text-indigo-600">{currentProduct.reorderPoint}</span>
+            <span className="text-xs text-slate-500">units</span>
           </div>
-          <p className="mt-1 text-[11px] text-slate-500">Trigger PO when stock hits this count</p>
         </div>
 
-        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-          <span className="text-xs text-slate-400">Stockout Runway</span>
-          <div className="mt-1 flex items-baseline gap-2">
-            <span className={`text-2xl font-bold ${isCriticalStockout ? 'text-rose-400' : 'text-slate-200'}`}>
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
+          <span className="text-xs text-slate-500">Stock Runway</span>
+          <div className="mt-1 flex items-baseline gap-1.5">
+            <span className={`text-2xl font-bold ${isCriticalStockout ? 'text-rose-600' : 'text-slate-900'}`}>
               {daysToStockout}
             </span>
-            <span className="text-xs text-slate-400">Days</span>
+            <span className="text-xs text-slate-500">Days (Lead: {currentProduct.leadTimeDays}d)</span>
           </div>
-          <p className="mt-1 text-[11px] text-slate-500">Lead time: {currentProduct.leadTimeDays} days</p>
         </div>
-
       </div>
 
-      {/* AI Recommendation Highlight Box */}
-      <div className="rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/40 via-slate-900 to-slate-900 p-5 shadow-lg">
-        <div className="flex items-start gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-400 flex-shrink-0">
-            <Sparkles className="h-4 w-4" />
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">
-                StockMind AI Decision Directive
-              </span>
-              {recommendedSupplier && (
-                <span className="rounded bg-indigo-500/20 px-2 py-0.5 text-[10px] font-bold text-indigo-200 border border-indigo-500/40">
-                  Recommended: {recommendedSupplier.name}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-slate-200 leading-relaxed max-w-3xl">
+      {/* AI Pick Directive */}
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 shadow-xs">
+        <div className="flex items-start gap-2.5">
+          <Sparkles className="h-4 w-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <span className="text-xs font-bold text-emerald-800">
+              AI Decision Recommendation:
+            </span>
+            <p className="text-xs text-slate-700 mt-0.5 leading-relaxed">
               {aiReason}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Multi-Supplier Comparison Matrix Table */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 shadow-xl backdrop-blur-md">
-        
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-slate-800/80">
+      {/* Suppliers Matrix Cards */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-slate-100">
           <div>
-            <h3 className="text-sm font-bold text-white">Vendor Comparison & Trade-off Scoring</h3>
-            <p className="text-xs text-slate-400">
-              Evaluating {availableSuppliers.length} approved distribution sources for {currentProduct.name}.
-            </p>
+            <h3 className="text-sm font-bold text-slate-900">Vendor Comparison ({availableSuppliers.length} Approved Suppliers)</h3>
+            <p className="text-xs text-slate-500">Prices and batch estimates calculated in BDT (৳).</p>
           </div>
 
-          <div className="flex items-center gap-4 text-xs">
-            {/* Batch quantity override */}
+          <div className="flex items-center gap-3 text-xs">
             <div className="flex items-center gap-2">
-              <label className="text-slate-400">Order Qty:</label>
+              <label className="text-slate-600 font-medium">Batch Qty:</label>
               <input
                 type="number"
-                min="10"
+                min="5"
                 max="1000"
                 value={activeOrderQty}
                 onChange={(e) => setCustomQty(Math.max(1, parseInt(e.target.value) || 1))}
-                className="w-20 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-center font-bold text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="w-16 rounded-md border border-slate-300 bg-white px-2 py-1 text-center font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-xs"
               />
             </div>
 
-            {/* Expedited shipping checkbox */}
-            <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+            <label className="flex items-center gap-1.5 cursor-pointer text-slate-700 font-medium">
               <input
                 type="checkbox"
                 checked={isExpedited}
                 onChange={(e) => setIsExpedited(e.target.checked)}
-                className="rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-0"
+                className="rounded border-slate-300 text-emerald-600 focus:ring-0"
               />
-              <span>Expedited Freight</span>
+              <span>Expedited Dispatch</span>
             </label>
           </div>
         </div>
 
-        {/* Suppliers List */}
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {/* Supplier Cards Grid */}
+        <div className="mt-4 grid grid-cols-1 gap-3.5 lg:grid-cols-3">
           {availableSuppliers.map((supplier) => {
             const isRec = supplier.id === recommendedSupplier?.id;
-            const unitPrice = Number((currentProduct.costPrice * (isExpedited ? supplier.unitCostMarkup * 1.05 : supplier.unitCostMarkup)).toFixed(2));
-            const batchCost = Number((unitPrice * activeOrderQty).toFixed(2));
+            const unitPrice = Math.round(currentProduct.costPrice * (isExpedited ? supplier.unitCostMarkup * 1.05 : supplier.unitCostMarkup));
+            const batchCost = unitPrice * activeOrderQty;
             const leadTime = isExpedited ? supplier.expeditedLeadTime : supplier.baseLeadTime;
             const willStockoutBeforeArrival = daysToStockout < leadTime;
 
             return (
               <div
                 key={supplier.id}
-                className={`relative flex flex-col justify-between rounded-xl border p-5 transition-all ${
+                className={`relative flex flex-col justify-between rounded-xl border p-4 transition-all ${
                   isRec
-                    ? 'border-indigo-500/50 bg-gradient-to-b from-indigo-950/20 to-slate-900/90 shadow-lg shadow-indigo-950/30'
-                    : 'border-slate-800 bg-slate-950/60 hover:border-slate-700'
+                    ? 'border-emerald-300 bg-emerald-50/40 shadow-xs'
+                    : 'border-slate-200 bg-white hover:border-slate-300 shadow-xs'
                 }`}
               >
-                {/* AI Pick Badge */}
                 {isRec && (
-                  <span className="absolute -top-2.5 right-4 flex items-center gap-1 rounded-full bg-indigo-600 px-2.5 py-0.5 text-[10px] font-bold text-white shadow-md">
-                    <Sparkles className="h-3 w-3" /> AI Optimal Pick
+                  <span className="absolute -top-2.5 right-3 flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[9px] font-bold text-white shadow-xs">
+                    <Sparkles className="h-2.5 w-2.5" /> AI Recommended
                   </span>
                 )}
 
                 <div>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h4 className="text-sm font-bold text-white">{supplier.name}</h4>
-                      <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
-                        <Building className="h-3 w-3 text-slate-500" />
-                        {supplier.location}
-                      </p>
-                    </div>
-                  </div>
+                  <h4 className="text-xs font-bold text-slate-900">{supplier.name}</h4>
+                  <p className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
+                    <Building className="h-3 w-3 text-slate-400" />
+                    {supplier.location}
+                  </p>
 
-                  {/* Supplier Metrics */}
-                  <div className="mt-4 space-y-2 text-xs border-y border-slate-800/80 py-3">
-                    
+                  <div className="mt-3 space-y-1.5 text-xs border-y border-slate-100 py-2.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-400">Reliability Rating:</span>
+                      <span className="text-slate-500">Reliability:</span>
                       <div className="flex items-center gap-1">
-                        <span className="font-bold text-emerald-400">{supplier.reliability}%</span>
-                        <div className="flex text-amber-400">
-                          <Star className="h-3 w-3 fill-amber-400" />
-                          <span className="text-[10px] text-slate-400 ml-1">({supplier.rating})</span>
-                        </div>
+                        <span className="font-bold text-emerald-700">{supplier.reliability}%</span>
+                        <span className="text-[10px] text-slate-400">({supplier.rating}★)</span>
                       </div>
                     </div>
 
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-400">Transit Window:</span>
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-3 w-3 text-indigo-400" />
-                        <span className={`font-bold ${willStockoutBeforeArrival ? 'text-rose-400' : 'text-slate-200'}`}>
-                          {leadTime} Days {isExpedited ? '(Expedited)' : '(Standard)'}
-                        </span>
-                      </div>
+                      <span className="text-slate-500">Transit:</span>
+                      <span className={`font-bold ${willStockoutBeforeArrival ? 'text-rose-600' : 'text-slate-900'}`}>
+                        {leadTime} Days
+                      </span>
                     </div>
 
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-400">Unit Wholesale Cost:</span>
-                      <span className="font-bold text-slate-200">${unitPrice} /unit</span>
+                      <span className="text-slate-500">Unit Wholesale Cost:</span>
+                      <span className="font-bold text-slate-900">{formatBDT(unitPrice)} /unit</span>
                     </div>
 
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-400">Total Batch ({activeOrderQty} units):</span>
-                      <span className="font-bold text-white text-sm">${batchCost.toLocaleString()}</span>
+                      <span className="text-slate-500">Total Batch Cost:</span>
+                      <span className="font-bold text-slate-900">{formatBDT(batchCost)}</span>
                     </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-400">Min Order Qty (MOQ):</span>
-                      <span className="text-slate-400">{supplier.minOrderQty} units</span>
-                    </div>
-
-                  </div>
-
-                  {/* Stockout Risk Indicator for this supplier */}
-                  <div className="mt-3">
-                    {willStockoutBeforeArrival ? (
-                      <div className="flex items-center gap-1 text-[11px] text-rose-400 font-medium">
-                        <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
-                        <span>Warning: {leadTime}d transit exceeds {daysToStockout}d stock runway!</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1 text-[11px] text-emerald-400 font-medium">
-                        <ShieldCheck className="h-3.5 w-3.5 flex-shrink-0" />
-                        <span>Safe: Replenishment arrives before zero-stock point.</span>
-                      </div>
-                    )}
                   </div>
                 </div>
 
-                {/* Create PO CTA */}
-                <div className="mt-5">
+                <div className="mt-3.5">
                   <button
-                    onClick={() => handleCreatePO(supplier, activeOrderQty)}
-                    className={`w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold text-white transition-all ${
+                    onClick={() => handleCreatePurchaseOrder(supplier, activeOrderQty)}
+                    className={`w-full flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-bold transition-all shadow-xs ${
                       isRec
-                        ? 'bg-indigo-600 hover:bg-indigo-500 shadow-md shadow-indigo-600/30'
-                        : 'border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200'
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        : 'border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700'
                     }`}
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    Generate PO ({activeOrderQty} units — ${batchCost.toLocaleString()})
+                    Create PO ({activeOrderQty} units)
                   </button>
                 </div>
-
               </div>
             );
           })}
         </div>
-
       </div>
 
     </div>
