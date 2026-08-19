@@ -1,0 +1,106 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with display name, email, and preferences",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "displayName": { "type": "string", "maxLength": 128 },
+        "photoURL": { "type": "string", "maxLength": 512 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "themePreference": { "type": "string", "enum": ["dark", "light"] }
+      },
+      "required": ["userId", "email"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Inventory SKU entity containing stock metrics, risk calculations, and pricing",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "sku": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 128 },
+        "category": { "type": "string", "maxLength": 64 },
+        "currentStock": { "type": "number" },
+        "safetyStock": { "type": "number" },
+        "dailyDemand": { "type": "number" },
+        "unitPrice": { "type": "number" },
+        "costPrice": { "type": "number" },
+        "leadTimeDays": { "type": "number" },
+        "reorderPoint": { "type": "number" },
+        "eoq": { "type": "number" },
+        "demandTrend": { "type": "number" },
+        "daysWithoutSale": { "type": "number" },
+        "riskScore": { "type": "number" },
+        "status": { "type": "string", "enum": ["healthy", "warning", "critical", "dead_stock"] },
+        "holdingCostAnnual": { "type": "number" },
+        "preferredSupplierId": { "type": "string", "maxLength": 128 },
+        "lastRestocked": { "type": "string" },
+        "userId": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "sku", "name", "userId"]
+    },
+    "PurchaseOrder": {
+      "title": "PurchaseOrder",
+      "description": "Purchase order record tracking supplier procurement pipeline",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "poNumber": { "type": "string", "maxLength": 64 },
+        "productId": { "type": "string", "maxLength": 128 },
+        "productName": { "type": "string", "maxLength": 128 },
+        "productSku": { "type": "string", "maxLength": 64 },
+        "supplierId": { "type": "string", "maxLength": 128 },
+        "supplierName": { "type": "string", "maxLength": 128 },
+        "quantity": { "type": "number" },
+        "unitCost": { "type": "number" },
+        "totalCost": { "type": "number" },
+        "status": { "type": "string", "enum": ["draft", "submitted", "in_transit", "delivered", "cancelled"] },
+        "createdAt": { "type": "string" },
+        "expectedDeliveryDate": { "type": "string" },
+        "userId": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "poNumber", "productId", "supplierId", "userId"]
+    },
+    "AIActionItem": {
+      "title": "AIActionItem",
+      "description": "Human-in-the-loop inventory optimization action recommendation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "severity": { "type": "string", "enum": ["urgent", "attention", "optimize"] },
+        "productId": { "type": "string", "maxLength": 128 },
+        "productName": { "type": "string", "maxLength": 128 },
+        "productSku": { "type": "string", "maxLength": 64 },
+        "title": { "type": "string", "maxLength": 256 },
+        "description": { "type": "string", "maxLength": 1024 },
+        "actionType": { "type": "string", "enum": ["approve_reorder", "adjust_safety_stock", "launch_clearance", "supplier_switch"] },
+        "avoidedLossEstimate": { "type": "number" },
+        "riskScore": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "approved", "dismissed"] },
+        "userId": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "productId", "severity", "actionType", "userId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Stores user profiles"
+    },
+    "/users/{userId}/products/{productId}": {
+      "schema": "Product",
+      "description": "User inventory catalog items"
+    },
+    "/users/{userId}/purchaseOrders/{poId}": {
+      "schema": "PurchaseOrder",
+      "description": "User purchase order documents"
+    },
+    "/users/{userId}/actionQueue/{actionId}": {
+      "schema": "AIActionItem",
+      "description": "User AI decision queue recommendations"
+    }
+  }
+}

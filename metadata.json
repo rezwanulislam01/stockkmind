@@ -1,0 +1,6 @@
+{
+  "name": "StockMind — AI-Powered Inventory Decision Intelligence Platform",
+  "description": "Enterprise SaaS decision intelligence platform for SMEs providing real-time demand forecasting, risk scoring, dead-stock capital tracking, smart supplier reorder matrix, scenario simulator, and AI analyst reasoning.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
