@@ -11,6 +11,9 @@ import { ActionWhyModal } from './components/ActionWhyModal';
 import { RecordSaleModal } from './components/RecordSaleModal';
 import { AddProductModal } from './components/AddProductModal';
 import { AIMultiAssistant } from './components/AIMultiAssistant';
+import { VoiceCommandModal } from './components/VoiceCommandModal';
+import { LiveStockTicker } from './components/LiveStockTicker';
+import { Mic, Radio } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import { 
   initializeUserInventory, 
@@ -65,6 +68,7 @@ export default function App() {
   const [isRecordSaleOpen, setIsRecordSaleOpen] = useState<boolean>(false);
   const [isAddProductOpen, setIsAddProductOpen] = useState<boolean>(false);
   const [isAIAssistantOpen, setIsAIAssistantOpen] = useState<boolean>(false);
+  const [isVoiceModalOpen, setIsVoiceModalOpen] = useState<boolean>(false);
 
   // Firestore Real-Time Subscriptions when User is Authenticated
   useEffect(() => {
@@ -395,8 +399,18 @@ export default function App() {
         onOpenAddProduct={() => setIsAddProductOpen(true)}
         onToggleChat={() => setIsAIAssistantOpen(!isAIAssistantOpen)}
         isChatOpen={isAIAssistantOpen}
+        onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
         onSelectDemoScenario={handleSelectScenario}
         currentDemoScenario={activeDemoScenario}
+      />
+
+      {/* Live Present Stock Status Marquee Ticker (Right to Left pulse) */}
+      <LiveStockTicker
+        products={products}
+        onSelectProduct={prod => {
+          setSelectedProduct(prod);
+          setDrilldownProduct(prod);
+        }}
       />
 
       {/* Main Workspace Body */}
@@ -420,6 +434,7 @@ export default function App() {
               setDrilldownProduct(prod);
             }}
             onNavigateTab={setCurrentTab}
+            onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
           />
         )}
 
@@ -544,7 +559,33 @@ export default function App() {
           setDrilldownProduct(prod);
         }}
         onNavigateTab={setCurrentTab}
+        onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
       />
+
+      {/* Voice Command Intelligence Modal */}
+      <VoiceCommandModal
+        isOpen={isVoiceModalOpen}
+        onClose={() => setIsVoiceModalOpen(false)}
+        products={products}
+        suppliers={suppliers}
+      />
+
+      {/* Floating Quick Voice Command Trigger Button */}
+      <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2">
+        <button
+          onClick={() => setIsVoiceModalOpen(true)}
+          className="group relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-tr from-emerald-600 via-teal-600 to-emerald-500 text-white shadow-xl shadow-emerald-900/30 hover:scale-105 hover:shadow-2xl transition-all duration-300 ring-4 ring-emerald-500/20"
+          title="Voice Command: Ask about any Industrial Zone"
+        >
+          <Mic className="h-6 w-6 text-white group-hover:scale-110 transition-transform" />
+          <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 ring-2 ring-white">
+            <Radio className="h-2.5 w-2.5 text-white animate-pulse" />
+          </span>
+          <span className="absolute right-full mr-3 hidden sm:group-hover:flex whitespace-nowrap rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-bold text-white shadow-xl border border-slate-700 pointer-events-none animate-in fade-in slide-in-from-right-2 duration-200">
+            🎙️ Ask Voice AI about Industrial Zones
+          </span>
+        </button>
+      </div>
 
     </div>
   );

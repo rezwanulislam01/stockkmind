@@ -1,8 +1,13 @@
 export type ProductCategory = 
-  | 'Groceries' 
-  | 'Personal Care' 
-  | 'Electronics' 
-  | 'Beverages' 
+  | 'Agri-Grains & Silo'
+  | 'Oil Refinery Feedstock'
+  | 'Feed Mill Ingredients'
+  | 'Industrial Packaging'
+  | 'Chemicals & Processing'
+  | 'Groceries'
+  | 'Personal Care'
+  | 'Electronics'
+  | 'Beverages'
   | 'Home & Living';
 
 export type StockStatus = 'healthy' | 'warning' | 'critical' | 'dead_stock';
@@ -17,18 +22,21 @@ export interface Product {
   sku: string;
   name: string;
   category: ProductCategory;
-  currentStock: number;
+  currentStock: number; // in Metric Tons (MT) or Units
   safetyStock: number;
-  dailyDemand: number;
-  unitPrice: number; // Retail selling price in BDT (৳)
-  costPrice: number; // Wholesale unit cost in BDT (৳)
+  dailyDemand: number; // Daily Factory Consumption Rate (MT or units / day)
+  unitPrice: number; // Valuation / Dispatch value in BDT (৳)
+  costPrice: number; // Import / Landing cost in BDT (৳)
   leadTimeDays: number;
   reorderPoint: number;
   eoq: number;
   demandTrend: number; // percentage change, e.g. +23
-  daysWithoutSale: number; // consecutive days with 0 sales
+  daysWithoutSale: number; // consecutive days with 0 consumption
   riskScore: number; // 0 - 100
   status: StockStatus;
+  unitOfMeasure?: string; // e.g. 'MT', 'Bags (50kg)', 'Drums', 'Litres'
+  storageLocation?: string; // e.g. 'Silo A-04 (Rajshahi)', 'Tank Terminal 2 (Chattogram)'
+  plantDivision?: string; // e.g. 'SSR Flour Mills', 'SSR Feed Plant', 'SSR Edible Oil Refinery'
   holdingCostPerYear?: number;
   orderSetupCost?: number;
   holdingCostAnnual?: number; // e.g. 0.18 (18%)
@@ -39,6 +47,7 @@ export interface Product {
   salesHistory: DailySales[];
   notes?: string;
   lastRestocked?: string;
+  imageUrl?: string;
   userId?: string;
 }
 
@@ -94,6 +103,7 @@ export interface AIActionItem {
   sku?: string;
   category?: string;
   title: string;
+  imageUrl?: string;
   description?: string;
   reasoning?: string;
   actionType: ActionType;

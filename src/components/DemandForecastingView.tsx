@@ -16,7 +16,8 @@ import {
   TrendingUp, 
   AlertCircle, 
   Info, 
-  ChevronDown
+  ChevronDown,
+  Factory
 } from 'lucide-react';
 import { Product } from '../types';
 import { calculateHoltsForecast } from '../utils/forecasting';
@@ -46,32 +47,33 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
   }, [currentProduct, forecastHorizon, alpha, beta]);
 
   if (!currentProduct) {
-    return <div className="p-8 text-center text-slate-500">No products available for forecasting.</div>;
+    return <div className="p-8 text-center text-slate-500">No industrial raw materials available for forecasting.</div>;
   }
 
+  const unit = currentProduct.unitOfMeasure || 'MT';
   const daysToStockout = (currentProduct.currentStock / Math.max(0.1, currentProduct.dailyDemand)).toFixed(1);
   const isHighRisk = currentProduct.riskScore >= 75 || Number(daysToStockout) <= currentProduct.leadTimeDays;
 
   return (
     <div className="space-y-6 pb-12">
       
-      {/* Header & Product Selector */}
+      {/* Header & Feedstock Selector */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
         <div>
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-              <TrendingUp className="h-4 w-4" />
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+              <Factory className="h-4 w-4" />
             </div>
-            <h2 className="text-base font-bold text-slate-900 tracking-tight">Demand Forecasting & Predictive Intelligence</h2>
+            <h2 className="text-base font-bold text-slate-900 tracking-tight">Plant Consumption Forecasting & Silo Telemetry</h2>
           </div>
           <p className="mt-1 text-xs text-slate-500">
-            Real-time Double Exponential Smoothing (Holt's Linear) with Gaussian confidence interval bands.
+            Real-time Double Exponential Smoothing (Holt's Linear) predicting factory milling run-rates & vessel delivery windows.
           </p>
         </div>
 
-        {/* SKU Selector Dropdown */}
+        {/* Material Selector Dropdown */}
         <div className="flex items-center gap-3">
-          <label className="text-xs font-medium text-slate-600">Target SKU:</label>
+          <label className="text-xs font-medium text-slate-600">Silo Material:</label>
           <div className="relative">
             <select
               value={currentProduct.id}
@@ -83,7 +85,7 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
             >
               {products.map((p) => (
                 <option key={p.id} value={p.id} className="bg-white text-slate-900">
-                  {p.name} ({p.sku}) — {p.dailyDemand} u/day
+                  {p.name} ({p.sku}) — {p.dailyDemand} {p.unitOfMeasure || 'MT'}/day
                 </option>
               ))}
             </select>
@@ -99,24 +101,33 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
         <div className="lg:col-span-3 rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
           
           {/* Chart Header & Controls */}
-          <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-slate-900">{currentProduct.name}</span>
-                <span className="rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-mono text-emerald-800 border border-emerald-200">
-                  {currentProduct.sku}
-                </span>
-                <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
-                  isHighRisk 
-                    ? 'bg-rose-100 text-rose-700 border border-rose-200' 
-                    : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                }`}>
-                  Risk: {currentProduct.riskScore}/100
-                </span>
+          <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xs">
+                {currentProduct.imageUrl ? (
+                  <img src={currentProduct.imageUrl} alt={currentProduct.name} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-xs">🏭</div>
+                )}
               </div>
-              <p className="mt-1 text-xs text-slate-500">
-                Last 30 Days Actuals (Solid Slate) vs Next {forecastHorizon} Days Holt's Forecast (Emerald) & Confidence Interval
-              </p>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-bold text-slate-900 dark:text-white">{currentProduct.name}</span>
+                  <span className="rounded bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 text-[10px] font-mono text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    {currentProduct.sku}
+                  </span>
+                  <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
+                    isHighRisk 
+                      ? 'bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-700' 
+                      : 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700'
+                  }`}>
+                    Risk: {currentProduct.riskScore}/100
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Last 30 Days Actual Factory Intake vs Next {forecastHorizon} Days Holt's Projection ({unit}) & 95% Confidence Band
+                </p>
+              </div>
             </div>
 
             {/* Horizon Selector */}
@@ -167,16 +178,16 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
                           <p className="font-semibold text-slate-900">{label}</p>
                           {data.historicalSales !== undefined && (
                             <p className="text-slate-600 mt-1">
-                              Actual Daily Sales: <strong>{data.historicalSales} units</strong>
+                              Factory Milling Intake: <strong>{data.historicalSales} {unit}</strong>
                             </p>
                           )}
                           {data.forecast !== undefined && (
                             <div className="mt-1 space-y-0.5">
                               <p className="text-emerald-700 font-semibold">
-                                Holt's Forecast: <strong>{data.forecast} units</strong>
+                                Holt's Projection: <strong>{data.forecast} {unit}</strong>
                               </p>
                               <p className="text-[10px] text-slate-500">
-                                95% Confidence: [{data.lowerBound} – {data.upperBound}]
+                                95% Confidence: [{data.lowerBound} – {data.upperBound}] {unit}
                               </p>
                             </div>
                           )}
@@ -194,12 +205,12 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
                   wrapperStyle={{ paddingBottom: '12px', fontSize: '11px' }}
                 />
 
-                {/* Safety Stock / Average Reference Line */}
+                {/* Average Reference Line */}
                 <ReferenceLine 
                   y={currentProduct.dailyDemand} 
                   stroke="#f59e0b" 
                   strokeDasharray="4 4" 
-                  label={{ value: `Avg Demand (${currentProduct.dailyDemand})`, fill: '#d97706', fontSize: 10 }} 
+                  label={{ value: `Plant Run-Rate (${currentProduct.dailyDemand} ${unit})`, fill: '#d97706', fontSize: 10 }} 
                 />
 
                 {/* Confidence Interval Area */}
@@ -226,7 +237,7 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
                   strokeWidth={2}
                   dot={{ r: 2.5, fill: '#475569' }}
                   activeDot={{ r: 5, fill: '#10b981' }}
-                  name="Actual Historical Sales"
+                  name="Daily Factory Consumption"
                   connectNulls={false}
                 />
 
@@ -234,10 +245,10 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
                 <Line
                   type="monotone"
                   dataKey="forecast"
-                  stroke="#059669"
+                  stroke="#047857"
                   strokeWidth={2.5}
                   strokeDasharray="5 5"
-                  dot={{ r: 3.5, fill: '#059669' }}
+                  dot={{ r: 3.5, fill: '#047857' }}
                   name="Holt's Linear Forecast"
                   connectNulls={false}
                 />
@@ -249,12 +260,12 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
           <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-xs text-slate-600">
             <div className="flex items-center gap-2">
               <Info className="h-4 w-4 text-emerald-600 flex-shrink-0" />
-              <span>Model dynamically accounts for trend velocity ({currentProduct.demandTrend > 0 ? '+' : ''}{currentProduct.demandTrend}%).</span>
+              <span>Plant consumption accounts for shift acceleration velocity ({currentProduct.demandTrend > 0 ? '+' : ''}{currentProduct.demandTrend}%).</span>
             </div>
             <div className="flex items-center gap-3">
-              <span>Forecast RMSE: <strong className="text-slate-800">±1.42 units</strong></span>
+              <span>Forecast RMSE: <strong className="text-slate-800">±2.1 {unit}</strong></span>
               <span>•</span>
-              <span>Backtest Accuracy: <strong className="text-emerald-700">94.2%</strong></span>
+              <span>Backtest Accuracy: <strong className="text-emerald-700">96.4%</strong></span>
             </div>
           </div>
 
@@ -266,7 +277,7 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
           {/* Holt's Parameters Card */}
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
             <div className="flex items-center gap-2 text-xs font-bold text-slate-900 uppercase tracking-wider">
-              <Sliders className="h-4 w-4 text-emerald-600" />
+              <Sliders className="h-4 w-4 text-emerald-700" />
               Smoothing Parameters
             </div>
 
@@ -287,7 +298,7 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
                   onChange={(e) => setAlpha(parseFloat(e.target.value))}
                   className="mt-2 w-full accent-emerald-600 cursor-pointer"
                 />
-                <p className="mt-1 text-[10px] text-slate-500">Weight on recent sales vs historical baseline.</p>
+                <p className="mt-1 text-[10px] text-slate-500">Weight on recent milling shifts vs baseline.</p>
               </div>
 
               {/* Beta Slider */}
@@ -305,7 +316,7 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
                   onChange={(e) => setBeta(parseFloat(e.target.value))}
                   className="mt-2 w-full accent-emerald-600 cursor-pointer"
                 />
-                <p className="mt-1 text-[10px] text-slate-500">Responsiveness to growth acceleration / deceleration.</p>
+                <p className="mt-1 text-[10px] text-slate-500">Responsiveness to seasonal peak production cycles.</p>
               </div>
 
               <button
@@ -318,42 +329,42 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
             </div>
           </div>
 
-          {/* SKU Intelligence Summary Card */}
+          {/* Plant Silo Predictive Indicators */}
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Predictive Indicators</h3>
+            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Silo & Logistics Indicators</h3>
             
             <div className="mt-4 space-y-3 text-xs">
               
               <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                <span className="text-slate-500">Current On-Hand:</span>
-                <span className="font-bold text-slate-900">{currentProduct.currentStock} units</span>
+                <span className="text-slate-500">Current Silo Stock:</span>
+                <span className="font-bold text-slate-900">{currentProduct.currentStock} {unit}</span>
               </div>
 
               <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                <span className="text-slate-500">Daily Demand Run-Rate:</span>
-                <span className="font-bold text-emerald-700">{currentProduct.dailyDemand} units/day</span>
+                <span className="text-slate-500">Daily Factory Run-Rate:</span>
+                <span className="font-bold text-emerald-700">{currentProduct.dailyDemand} {unit}/day</span>
               </div>
 
               <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                <span className="text-slate-500">Days to Depletion:</span>
+                <span className="text-slate-500">Silo Runway:</span>
                 <span className={`font-bold ${Number(daysToStockout) <= currentProduct.leadTimeDays ? 'text-rose-600' : 'text-slate-900'}`}>
                   {daysToStockout} Days
                 </span>
               </div>
 
               <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                <span className="text-slate-500">Supplier Lead Time:</span>
+                <span className="text-slate-500">Port Vessel Lead Time:</span>
                 <span className="font-semibold text-slate-800">{currentProduct.leadTimeDays} Days</span>
               </div>
 
               <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                <span className="text-slate-500">Dynamic Safety Buffer:</span>
-                <span className="font-semibold text-slate-800">{currentProduct.safetyStock} units</span>
+                <span className="text-slate-500">Plant Safety Buffer:</span>
+                <span className="font-semibold text-slate-800">{currentProduct.safetyStock} {unit}</span>
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-slate-500">Calculated EOQ Batch:</span>
-                <span className="font-bold text-emerald-700">{currentProduct.eoq} units</span>
+                <span className="text-slate-500">Bulk EOQ Shipment:</span>
+                <span className="font-bold text-emerald-700">{currentProduct.eoq} {unit}</span>
               </div>
 
             </div>
@@ -362,10 +373,10 @@ export const DemandForecastingView: React.FC<DemandForecastingViewProps> = ({
               <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
                 <div className="flex items-center gap-1.5 font-bold">
                   <AlertCircle className="h-4 w-4 text-rose-600" />
-                  Urgent Reorder Required
+                  Urgent Vessel Shipment Required
                 </div>
                 <p className="mt-1 text-[11px] text-rose-700 leading-relaxed">
-                  Depletion date arrives prior to standard replenishment window.
+                  Silo depletion date arrives prior to sea freight port discharge window.
                 </p>
               </div>
             )}

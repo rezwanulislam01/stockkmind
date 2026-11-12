@@ -5,7 +5,9 @@ import {
   Sparkles, 
   ChevronDown,
   Building,
-  Plus
+  Plus,
+  Ship,
+  Factory
 } from 'lucide-react';
 import { Product, PurchaseOrder, Supplier } from '../types';
 import { formatBDT } from '../utils/forecasting';
@@ -33,16 +35,16 @@ export const SupplierMatrixView: React.FC<SupplierMatrixViewProps> = ({
   const [poSuccessMessage, setPoSuccessMessage] = useState<string | null>(null);
 
   if (!currentProduct) {
-    return <div className="p-8 text-center text-slate-500">No product selected for supplier evaluation.</div>;
+    return <div className="p-8 text-center text-slate-500">No industrial material selected for supplier evaluation.</div>;
   }
 
-  // Multi-suppliers for this SKU
+  const unit = currentProduct.unitOfMeasure || 'MT';
   const availableSuppliers = suppliers.length > 0 ? suppliers : [];
   const activeOrderQty = customQty !== null ? customQty : currentProduct.eoq;
   const daysToStockout = Number((currentProduct.currentStock / Math.max(0.1, currentProduct.dailyDemand)).toFixed(1));
   const isCriticalStockout = currentProduct.riskScore >= 75 || daysToStockout <= currentProduct.leadTimeDays;
 
-  // Determine AI recommended supplier
+  // Determine AI recommended supplier / vessel terminal
   let recommendedSupplier = availableSuppliers[0];
   let aiReason = "";
 
@@ -50,13 +52,13 @@ export const SupplierMatrixView: React.FC<SupplierMatrixViewProps> = ({
     const fastest = [...availableSuppliers].sort((a, b) => a.expeditedLeadTime - b.expeditedLeadTime)[0];
     if (fastest) {
       recommendedSupplier = fastest;
-      aiReason = `${fastest.name} in ${fastest.location} is recommended because current inventory runway is critical (${daysToStockout} days remaining vs ${fastest.expeditedLeadTime}d expedited transit), preventing an active stockout gap.`;
+      aiReason = `${fastest.name} (${fastest.location}) is recommended because plant silo runway is critical (${daysToStockout} days remaining vs ${fastest.expeditedLeadTime}d expedited transit/berthing), preventing plant production stoppage.`;
     }
   } else {
     const optimal = [...availableSuppliers].sort((a, b) => (b.reliability - a.unitCostMarkup * 10) - (a.reliability - b.unitCostMarkup * 10))[0];
     if (optimal) {
       recommendedSupplier = optimal;
-      aiReason = `${optimal.name} is recommended for highest delivery reliability (98%+) and competitive wholesale BDT pricing across Dhaka & regional depots.`;
+      aiReason = `${optimal.name} is recommended for optimal bulk shipping discharge reliability (98%+) and competitive landed port cost.`;
     }
   }
 
@@ -89,7 +91,7 @@ export const SupplierMatrixView: React.FC<SupplierMatrixViewProps> = ({
       });
     } catch (e) {}
 
-    setPoSuccessMessage(`Purchase Order for ${qty} units of ${currentProduct.name} generated (${formatBDT(totalCost)})!`);
+    setPoSuccessMessage(`Bulk PO for ${qty} ${unit} of ${currentProduct.name} generated (${formatBDT(totalCost, true)})!`);
     setTimeout(() => setPoSuccessMessage(null), 5000);
   };
 
@@ -100,17 +102,17 @@ export const SupplierMatrixView: React.FC<SupplierMatrixViewProps> = ({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
         <div>
           <div className="flex items-center gap-2">
-            <ShoppingCart className="h-4 w-4 text-emerald-600" />
-            <h2 className="text-base font-bold text-slate-900 tracking-tight">Bangladesh Supplier Matrix & Smart Reorder (EOQ)</h2>
+            <Ship className="h-4 w-4 text-emerald-700" />
+            <h2 className="text-base font-bold text-slate-900 tracking-tight">Bulk Commodity Suppliers & Port Freight Matrix (EOQ)</h2>
           </div>
           <p className="text-xs text-slate-500">
-            Compare wholesale distributors across Dhaka, Narayanganj & Chattogram for optimal batch replenishment.
+            Compare international grain trading houses, port terminals (Chattogram, Mongla), and regional storage silos.
           </p>
         </div>
 
-        {/* SKU Selector */}
+        {/* Material Selector */}
         <div className="flex items-center gap-2">
-          <label className="text-xs font-medium text-slate-500">SKU:</label>
+          <label className="text-xs font-medium text-slate-500">Feedstock:</label>
           <div className="relative">
             <select
               value={currentProduct.id}
@@ -141,10 +143,10 @@ export const SupplierMatrixView: React.FC<SupplierMatrixViewProps> = ({
       {/* Quick Diagnostics */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
-          <span className="text-xs text-slate-500">Current Stock</span>
+          <span className="text-xs text-slate-500">Physical Silo Stock</span>
           <div className="mt-1 flex items-baseline gap-1.5">
             <span className="text-2xl font-bold text-slate-900">{currentProduct.currentStock}</span>
-            <span className="text-xs text-slate-500">units (Buffer: {currentProduct.safetyStock})</span>
+            <span className="text-xs text-slate-500">{unit} (Buffer: {currentProduct.safetyStock})</span>
           </div>
         </div>
 
@@ -152,25 +154,25 @@ export const SupplierMatrixView: React.FC<SupplierMatrixViewProps> = ({
           <span className="text-xs text-slate-500">Economic Order Qty (EOQ)</span>
           <div className="mt-1 flex items-baseline gap-1.5">
             <span className="text-2xl font-bold text-emerald-700">{currentProduct.eoq}</span>
-            <span className="text-xs text-slate-500">units batch</span>
+            <span className="text-xs text-slate-500">{unit} shipment</span>
           </div>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
-          <span className="text-xs text-slate-500">Reorder Threshold (ROP)</span>
+          <span className="text-xs text-slate-500">Reorder Trigger (ROP)</span>
           <div className="mt-1 flex items-baseline gap-1.5">
             <span className="text-2xl font-bold text-indigo-600">{currentProduct.reorderPoint}</span>
-            <span className="text-xs text-slate-500">units</span>
+            <span className="text-xs text-slate-500">{unit}</span>
           </div>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs">
-          <span className="text-xs text-slate-500">Stock Runway</span>
+          <span className="text-xs text-slate-500">Silo Runway</span>
           <div className="mt-1 flex items-baseline gap-1.5">
             <span className={`text-2xl font-bold ${isCriticalStockout ? 'text-rose-600' : 'text-slate-900'}`}>
               {daysToStockout}
             </span>
-            <span className="text-xs text-slate-500">Days (Lead: {currentProduct.leadTimeDays}d)</span>
+            <span className="text-xs text-slate-500">Days (Port Lead: {currentProduct.leadTimeDays}d)</span>
           </div>
         </div>
       </div>
@@ -178,10 +180,10 @@ export const SupplierMatrixView: React.FC<SupplierMatrixViewProps> = ({
       {/* AI Pick Directive */}
       <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 shadow-xs">
         <div className="flex items-start gap-2.5">
-          <Sparkles className="h-4 w-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+          <Sparkles className="h-4 w-4 text-emerald-700 flex-shrink-0 mt-0.5" />
           <div>
             <span className="text-xs font-bold text-emerald-800">
-              AI Decision Recommendation:
+              Procurement Intelligence Recommendation:
             </span>
             <p className="text-xs text-slate-700 mt-0.5 leading-relaxed">
               {aiReason}
@@ -194,20 +196,20 @@ export const SupplierMatrixView: React.FC<SupplierMatrixViewProps> = ({
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-slate-100">
           <div>
-            <h3 className="text-sm font-bold text-slate-900">Vendor Comparison ({availableSuppliers.length} Approved Suppliers)</h3>
-            <p className="text-xs text-slate-500">Prices and batch estimates calculated in BDT (৳).</p>
+            <h3 className="text-sm font-bold text-slate-900">Approved Trading Houses & Port Terminals ({availableSuppliers.length} Vendors)</h3>
+            <p className="text-xs text-slate-500">Prices and bulk delivery estimates calculated in BDT (৳).</p>
           </div>
 
           <div className="flex items-center gap-3 text-xs">
             <div className="flex items-center gap-2">
-              <label className="text-slate-600 font-medium">Batch Qty:</label>
+              <label className="text-slate-600 font-medium">Shipment Qty ({unit}):</label>
               <input
                 type="number"
-                min="5"
-                max="1000"
+                min="10"
+                max="50000"
                 value={activeOrderQty}
                 onChange={(e) => setCustomQty(Math.max(1, parseInt(e.target.value) || 1))}
-                className="w-16 rounded-md border border-slate-300 bg-white px-2 py-1 text-center font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-xs"
+                className="w-24 rounded-md border border-slate-300 bg-white px-2 py-1 text-center font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-xs"
               />
             </div>
 
@@ -218,7 +220,7 @@ export const SupplierMatrixView: React.FC<SupplierMatrixViewProps> = ({
                 onChange={(e) => setIsExpedited(e.target.checked)}
                 className="rounded border-slate-300 text-emerald-600 focus:ring-0"
               />
-              <span>Expedited Dispatch</span>
+              <span>Priority Port Clearance / Coastal Charter</span>
             </label>
           </div>
         </div>
@@ -242,7 +244,7 @@ export const SupplierMatrixView: React.FC<SupplierMatrixViewProps> = ({
                 }`}
               >
                 {isRec && (
-                  <span className="absolute -top-2.5 right-3 flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[9px] font-bold text-white shadow-xs">
+                  <span className="absolute -top-2.5 right-3 flex items-center gap-1 rounded-full bg-emerald-700 px-2 py-0.5 text-[9px] font-bold text-white shadow-xs">
                     <Sparkles className="h-2.5 w-2.5" /> AI Recommended
                   </span>
                 )}
@@ -256,7 +258,7 @@ export const SupplierMatrixView: React.FC<SupplierMatrixViewProps> = ({
 
                   <div className="mt-3 space-y-1.5 text-xs border-y border-slate-100 py-2.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Reliability:</span>
+                      <span className="text-slate-500">Discharge Reliability:</span>
                       <div className="flex items-center gap-1">
                         <span className="font-bold text-emerald-700">{supplier.reliability}%</span>
                         <span className="text-[10px] text-slate-400">({supplier.rating}★)</span>
@@ -264,20 +266,20 @@ export const SupplierMatrixView: React.FC<SupplierMatrixViewProps> = ({
                     </div>
 
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Transit:</span>
+                      <span className="text-slate-500">Port Transit & Customs:</span>
                       <span className={`font-bold ${willStockoutBeforeArrival ? 'text-rose-600' : 'text-slate-900'}`}>
                         {leadTime} Days
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Unit Wholesale Cost:</span>
-                      <span className="font-bold text-slate-900">{formatBDT(unitPrice)} /unit</span>
+                      <span className="text-slate-500">Landed Unit Cost:</span>
+                      <span className="font-bold text-slate-900">{formatBDT(unitPrice, true)} /{unit}</span>
                     </div>
 
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Total Batch Cost:</span>
-                      <span className="font-bold text-slate-900">{formatBDT(batchCost)}</span>
+                      <span className="text-slate-500">Total Shipment Cost:</span>
+                      <span className="font-bold text-slate-900">{formatBDT(batchCost, true)}</span>
                     </div>
                   </div>
                 </div>
@@ -287,12 +289,12 @@ export const SupplierMatrixView: React.FC<SupplierMatrixViewProps> = ({
                     onClick={() => handleCreatePurchaseOrder(supplier, activeOrderQty)}
                     className={`w-full flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-bold transition-all shadow-xs ${
                       isRec
-                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
                         : 'border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700'
                     }`}
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    Create PO ({activeOrderQty} units)
+                    Generate Bulk PO ({activeOrderQty} {unit})
                   </button>
                 </div>
               </div>

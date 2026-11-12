@@ -1,6 +1,6 @@
 {
-  "name": "StockMind — AI-Powered Inventory Decision Intelligence Platform",
-  "description": "Enterprise SaaS decision intelligence platform for SMEs providing real-time demand forecasting, risk scoring, dead-stock capital tracking, smart supplier reorder matrix, scenario simulator, and AI analyst reasoning.",
-  "requestFramePermissions": [],
+  "name": "SSR StockMind — Industrial Raw Materials & Agro-Manufacturing ERP",
+  "description": "Enterprise industrial inventory & raw materials decision intelligence platform modeled on SSR Group of Industry (Flour Mills, Feed Mills, Edible Oil Refineries, Auto Rice Mills, Grain Silos, and Port Logistics). Real-time silo runway tracking, daily factory consumption, import lead-time forecasting, supplier reorder matrix in BDT, and multi-turn AI copilot with interactive Voice Commands.",
+  "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

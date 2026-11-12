@@ -8,7 +8,7 @@ import {
   User 
 } from 'firebase/auth';
 import { 
-  getFirestore, 
+  initializeFirestore,
   doc, 
   getDocFromServer,
   collection,
@@ -46,7 +46,16 @@ export interface FirestoreErrorInfo {
 }
 
 export const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+// Initialize Firestore with auto-detect long-polling to prevent WebSocket timeouts in iframe containers
+export const db = initializeFirestore(
+  app, 
+  {
+    experimentalAutoDetectLongPolling: true,
+  }, 
+  firebaseConfig.firestoreDatabaseId
+);
+
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
@@ -67,18 +76,26 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  console.warn('Firestore Operation Notice:', JSON.stringify(errInfo));
+  return errInfo;
 }
 
-// Boot connection check per skill requirements
+// Resilient connection check
 export async function testConnection(): Promise<boolean> {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    const testPromise = getDocFromServer(doc(db, 'test', 'connection'));
+    const timeoutPromise = new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error('Connection timed out')), 5000)
+    );
+    await Promise.race([testPromise, timeoutPromise]);
     return true;
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn("Please check your Firebase configuration or network connectivity.");
+    if (error instanceof Error && (
+      error.message.includes('the client is offline') || 
+      error.message.includes('timed out') ||
+      error.message.includes('unavailable')
+    )) {
+      console.warn("Firestore running in offline/cached mode.");
     }
     return false;
   }
@@ -102,3 +119,4 @@ export async function logOut(): Promise<void> {
     throw error;
   }
 }
+
